@@ -1,0 +1,31 @@
+# --- 빌드 결과물 (Build Artifacts) ---
+# 모든 위치의 build 폴더와 .gradle 폴더를 제외
+build/
+.gradle/
+/app/build/
+bin/
+gen/
+out/
+
+# --- IDE 설정 (Android Studio / IntelliJ) ---
+# .idea 폴더 전체를 제외하거나, 핵심 설정 외의 것들을 제외
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# --- 로컬 설정 및 보안 (Local Configs & Security) ---
+# SDK 경로 등 로컬 환경 설정 파일
+local.properties
+# 앱 서명용 키 (보안상 절대 금지)
+*.jks
+*.keystore
+google-services.json
+
+# --- 시스템 생성 파일 (OS Generated) ---
+.DS_Store
+Thumbs.db
+
+# --- 릴리즈 결과물 폴더 제외 ---
+/app/release/
+
