@@ -3,13 +3,16 @@ package com.example.oss_project;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.Settings;
+import android.service.notification.NotificationListenerService;
 import android.util.Log;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -28,6 +31,8 @@ import java.util.List;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
+
+    private ImageButton btnRanking;
 
     private final int PERMISSION_REQUEST_CODE_S = 101;
 
@@ -56,6 +61,15 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        btnRanking = findViewById(R.id.btn_ranking);
+
+        if (btnRanking != null) {
+            btnRanking.setOnClickListener(v -> {
+                Intent intent = new Intent(MainActivity.this, RankingActivity.class);
+                startActivity(intent);
+            });
+        }
 
         tvLog = findViewById(R.id.tv_log);
         spinnerUuidFilter = findViewById(R.id.spinner_uuid_filter);
@@ -184,7 +198,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // 안준석 GPS
-    private void startGps(){
+    private void startGps() {
         android.location.LocationManager locationManager =
                 (android.location.LocationManager) getSystemService(LOCATION_SERVICE);
 
@@ -202,7 +216,6 @@ public class MainActivity extends AppCompatActivity {
             );
         }
     }
-
 
 
     // 안준석 로그 추가
@@ -266,12 +279,13 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean isDataChanged(BleDeviceData prev, BleDeviceData curr) {
         return prev.timestampValue != curr.timestampValue ||
-                prev.temp           != curr.temp           ||
-                prev.humidity       != curr.humidity       ||
-                prev.aqi            != curr.aqi            ||
-                prev.tvoc           != curr.tvoc           ||
-                prev.eco2           != curr.eco2;
+                prev.temp != curr.temp ||
+                prev.humidity != curr.humidity ||
+                prev.aqi != curr.aqi ||
+                prev.tvoc != curr.tvoc ||
+                prev.eco2 != curr.eco2;
     }
+
     public void onFilteredBleDataUpdated(List<BleDeviceData> dataList, List<String> discoveredUuids) {
         updateUuidSpinner(discoveredUuids);
         layoutScanRecords.removeAllViews();
@@ -310,47 +324,47 @@ public class MainActivity extends AppCompatActivity {
             // 서버 전송 안준석
             if (isSending) {
                 BleDeviceData prev = lastSentData.get(data.deviceAddress);
-                if (prev == null || isDataChanged(prev, data)){
+                if (prev == null || isDataChanged(prev, data)) {
                     lastSentData.put(data.deviceAddress, data);
                     postdata pd = RetrofitClient.makePostData(data, currentLat, currentLon,
                             Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID));
 
 
-                service.post_json(pd).enqueue(new retrofit2.Callback<Response>() {
-                    @Override
-                    public void onResponse(retrofit2.Call<Response> call,
-                                           retrofit2.Response<Response> response) {
-                        int code = response.code(); // 200, 404, 500 등
+                    service.post_json(pd).enqueue(new retrofit2.Callback<Response>() {
+                        @Override
+                        public void onResponse(retrofit2.Call<Response> call,
+                                               retrofit2.Response<Response> response) {
+                            int code = response.code(); // 200, 404, 500 등
 
-                        if (response.isSuccessful()) {
-                            Response body = response.body();
-                            boolean success = body != null && body.isSuccess();
-                            Log.d("서버전송", "성공 " + code + ": " + data.deviceAddress);
-                            runOnUiThread(() -> appendSendLog(success, data.deviceAddress, body, code));
-                        } else {
-                            // 에러일 때 바디 읽기
-                            String errorBody = "";
-                            try {
-                                if (response.errorBody() != null) {
-                                    errorBody = response.errorBody().string();
+                            if (response.isSuccessful()) {
+                                Response body = response.body();
+                                boolean success = body != null && body.isSuccess();
+                                Log.d("서버전송", "성공 " + code + ": " + data.deviceAddress);
+                                runOnUiThread(() -> appendSendLog(success, data.deviceAddress, body, code));
+                            } else {
+                                // 에러일 때 바디 읽기
+                                String errorBody = "";
+                                try {
+                                    if (response.errorBody() != null) {
+                                        errorBody = response.errorBody().string();
+                                    }
+                                } catch (Exception e) {
+                                    errorBody = "바디 읽기 실패";
                                 }
-                            } catch (Exception e) {
-                                errorBody = "바디 읽기 실패";
+
+                                String finalErrorBody = errorBody;
+                                Log.e("서버전송", "HTTP " + code + ": " + finalErrorBody);
+                                runOnUiThread(() -> appendSendLog(false, data.deviceAddress, null, code));
                             }
-
-                            String finalErrorBody = errorBody;
-                            Log.e("서버전송", "HTTP " + code + ": " + finalErrorBody);
-                            runOnUiThread(() -> appendSendLog(false, data.deviceAddress, null, code));
                         }
-                    }
 
-                    @Override
-                    public void onFailure(retrofit2.Call<Response> call, Throwable t) {
-                        Log.e("서버전송", "네트워크 실패: " + t.getMessage());
-                        runOnUiThread(() -> appendSendLog(false, data.deviceAddress, null, 0));
-                    }
-                });
-            }
+                        @Override
+                        public void onFailure(retrofit2.Call<Response> call, Throwable t) {
+                            Log.e("서버전송", "네트워크 실패: " + t.getMessage());
+                            runOnUiThread(() -> appendSendLog(false, data.deviceAddress, null, 0));
+                        }
+                    });
+                }
             }
         }
         tvLog.setText(
