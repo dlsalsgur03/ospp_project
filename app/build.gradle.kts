@@ -1,10 +1,17 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
+}
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(localPropertiesFile.inputStream())
 }
 
 android {
     namespace = "com.example.oss_project"
-        compileSdk = 36
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.oss_project"
@@ -14,6 +21,13 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "KAKAO_API_KEY",
+            "\"${localProperties["kakao.api.key"]}\"")
+        manifestPlaceholders["KAKAO_API_KEY"] = localProperties["kakao.api.key"] as String
+    }
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {
@@ -43,4 +57,7 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
+    implementation("com.kakao.maps.open:android:2.11.8")
+    implementation("com.google.android.gms:play-services-location:21.0.1")
+    implementation("de.hdodenhof:circleimageview:3.1.0")
 }
