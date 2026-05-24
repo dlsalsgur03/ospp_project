@@ -25,7 +25,9 @@
         android:theme="@style/Theme.OSS_Project"
         android:usesCleartextTraffic="true"
         >
-
+        <meta-data
+            android:name="com.kakao.maps.open.AppKey"
+            android:value="${KAKAO_API_KEY}" />
         <activity
             android:name=".MainActivity"
             android:exported="true" >

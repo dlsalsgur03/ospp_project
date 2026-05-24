@@ -147,9 +147,8 @@ public class ble {
 
     private void notifyFilteredDataToUi() {
         List<BleDeviceData> filteredList = getFilteredDataList();
-
         mainActivity.runOnUiThread(() -> {
-            mainActivity.onFilteredBleDataUpdated(filteredList, getDiscoveredUuids());
+            mainActivity.onFilteredBleDataUpdated(filteredList, getDiscoveredUuids()); // 이 줄 추가!
         });
     }
 
