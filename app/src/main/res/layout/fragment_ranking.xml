@@ -6,15 +6,7 @@
     android:layout_height="match_parent"
     android:background="#FFFFFF">
 
-    <ImageView
-        android:id="@+id/btnBack"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
-        android:src="@android:drawable/ic_media_previous"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        android:layout_marginTop="32dp"
-        android:layout_marginStart="24dp" />
+    <!-- Back button removed for fragment tab -->
 
     <TextView
         android:id="@+id/tvTitle"
@@ -24,10 +16,10 @@
         android:textSize="20sp"
         android:textStyle="bold"
         android:textColor="#333333"
-        app:layout_constraintTop_toTopOf="@id/btnBack"
-        app:layout_constraintBottom_toBottomOf="@id/btnBack"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="32dp" />
 
     <LinearLayout
         android:id="@+id/tabContainer"
@@ -299,6 +291,5 @@
         </LinearLayout>
 
     </androidx.core.widget.NestedScrollView>
-
 
 </androidx.constraintlayout.widget.ConstraintLayout>

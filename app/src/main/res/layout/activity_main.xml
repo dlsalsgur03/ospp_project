@@ -5,26 +5,28 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- 카카오맵 뷰 -->
-    <com.kakao.vectormap.MapView
-        android:id="@+id/map_view"
+    <!-- 프래그먼트 컨테이너 -->
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/main_container"
         android:layout_width="0dp"
         android:layout_height="0dp"
         app:layout_constraintBottom_toTopOf="@id/bottom_nav"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.0" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <!-- 하단 네비게이션 -->
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottom_nav"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:background="#ffffff"
         app:menu="@menu/bottom_nav_menu"
         app:labelVisibilityMode="labeled"
-        app:itemIconTint="@null"
+        app:itemIconTint="@color/nav_item_text_selector"
+        app:itemTextColor="@color/nav_item_text_selector"
+        app:itemBackground="@drawable/nav_item_bg_selector"
+        app:itemActiveIndicatorStyle="@style/EmptyIndicator"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>

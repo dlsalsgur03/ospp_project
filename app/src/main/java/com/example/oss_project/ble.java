@@ -29,7 +29,13 @@ import java.util.Locale;
 import java.util.Map;
 
 public class ble {
-    private MainActivity mainActivity;
+    public interface BleCallback {
+        void onFilteredBleDataUpdated(List<BleDeviceData> dataList, List<String> discoveredUuids);
+        void runOnUiThread(Runnable action);
+        android.app.Activity getBleActivity();
+    }
+
+    private BleCallback callback;
     private BluetoothLeScanner bluetoothLeScanner;
 
     // 최신 상태 저장용: 같은 장치 + 같은 UUID는 최신값으로 갱신
@@ -43,8 +49,8 @@ public class ble {
     private String nameKeywordFilter = "";
     private Integer minRssiFilter = null;
 
-    public void bleInitialize(MainActivity activity) {
-        this.mainActivity = activity;
+    public void bleInitialize(BleCallback callback) {
+        this.callback = callback;
         BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
         if (adapter != null) {
             this.bluetoothLeScanner = adapter.getBluetoothLeScanner();
@@ -54,7 +60,7 @@ public class ble {
     public void startScan() {
         if (bluetoothLeScanner == null) return;
 
-        if (ActivityCompat.checkSelfPermission(mainActivity, Manifest.permission.BLUETOOTH_SCAN)
+        if (callback == null || ActivityCompat.checkSelfPermission(callback.getBleActivity(), Manifest.permission.BLUETOOTH_SCAN)
                 != PackageManager.PERMISSION_GRANTED) {
             return;
         }
@@ -70,8 +76,8 @@ public class ble {
     }
 
     public void stopScan() {
-        if (bluetoothLeScanner != null
-                && ActivityCompat.checkSelfPermission(mainActivity, Manifest.permission.BLUETOOTH_SCAN)
+        if (bluetoothLeScanner != null && callback != null
+                && ActivityCompat.checkSelfPermission(callback.getBleActivity(), Manifest.permission.BLUETOOTH_SCAN)
                 == PackageManager.PERMISSION_GRANTED) {
             bluetoothLeScanner.stopScan(scanCallback);
             Log.d("BLE_SCAN", "BLE 스캔 중지");
@@ -146,19 +152,21 @@ public class ble {
     }
 
     private void notifyFilteredDataToUi() {
+        if (callback == null) return;
         List<BleDeviceData> filteredList = getFilteredDataList();
-        mainActivity.runOnUiThread(() -> {
-            mainActivity.onFilteredBleDataUpdated(filteredList, getDiscoveredUuids()); // 이 줄 추가!
+        callback.runOnUiThread(() -> {
+            callback.onFilteredBleDataUpdated(filteredList, getDiscoveredUuids());
         });
     }
 
     private final ScanCallback scanCallback = new ScanCallback() {
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
+            if (callback == null) return;
             BluetoothDevice device = result.getDevice();
             if (device == null) return;
 
-            if (ActivityCompat.checkSelfPermission(mainActivity, Manifest.permission.BLUETOOTH_CONNECT)
+            if (ActivityCompat.checkSelfPermission(callback.getBleActivity(), Manifest.permission.BLUETOOTH_CONNECT)
                     != PackageManager.PERMISSION_GRANTED) {
                 return;
             }
@@ -380,10 +388,11 @@ public class ble {
     }
 
     private void saveListToCsv(List<BleDeviceData> dataList, String uuidForFile) {
+        if (callback == null) return;
         String serviceName = getServiceNameFromUuid(uuidForFile);
         String safeServiceName = sanitizeFileName(serviceName);
 
-        File dir = mainActivity.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
+        File dir = callback.getBleActivity().getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
         if (dir == null) {
             Log.e("BLE_CSV", "저장 폴더를 가져올 수 없음");
             return;
@@ -443,6 +452,7 @@ public class ble {
         }
     }
     public void saveSignalQualityHistoryToCsv() {
+        if (callback == null) return;
         List<BleDeviceData> unsavedSignalList = new ArrayList<>();
 
         for (BleDeviceData data : scanHistoryList) {
@@ -456,7 +466,7 @@ public class ble {
             return;
         }
 
-        File dir = mainActivity.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
+        File dir = callback.getBleActivity().getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
         if (dir == null) {
             Log.e("BLE_SIGNAL_CSV", "저장 폴더를 가져올 수 없음");
             return;
