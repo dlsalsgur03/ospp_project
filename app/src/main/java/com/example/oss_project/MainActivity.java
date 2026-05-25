@@ -14,6 +14,9 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 public class MainActivity extends AppCompatActivity {
 
+    private HomeFragment homeFragment;
+    private RankingFragment rankingFragment;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // Kakao SDK 초기화
@@ -22,36 +25,37 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        if (savedInstanceState == null) {
+            homeFragment = new HomeFragment();
+            rankingFragment = new RankingFragment();
+
+            getSupportFragmentManager().beginTransaction()
+                    .add(R.id.main_container, rankingFragment, "ranking").hide(rankingFragment)
+                    .add(R.id.main_container, homeFragment, "home")
+                    .commit();
+        } else {
+            homeFragment = (HomeFragment) getSupportFragmentManager().findFragmentByTag("home");
+            rankingFragment = (RankingFragment) getSupportFragmentManager().findFragmentByTag("ranking");
+        }
+
         // 하단 네비게이션 설정
         BottomNavigationView bottomNav = findViewById(R.id.bottom_nav);
         bottomNav.setOnItemSelectedListener(item -> {
-            Fragment selectedFragment = null;
             int id = item.getItemId();
 
-            if (id == R.id.nav_map) {
-                selectedFragment = new HomeFragment();
-            } else if (id == R.id.nav_ranking) {
-                selectedFragment = new RankingFragment();
-            } else if (id == R.id.nav_book) {
-                // selectedFragment = new BookFragment();
-            } else if (id == R.id.nav_settings) {
-                // selectedFragment = new SettingsFragment();
-            }
+            // 복구 상황 대비: 변수가 null이면 다시 찾음
+            if (homeFragment == null) homeFragment = (HomeFragment) getSupportFragmentManager().findFragmentByTag("home");
+            if (rankingFragment == null) rankingFragment = (RankingFragment) getSupportFragmentManager().findFragmentByTag("ranking");
 
-            if (selectedFragment != null) {
-                getSupportFragmentManager().beginTransaction()
-                        .replace(R.id.main_container, selectedFragment)
-                        .commit();
+            if (id == R.id.nav_map && homeFragment != null) {
+                getSupportFragmentManager().beginTransaction().show(homeFragment).hide(rankingFragment).commit();
+                return true;
+            } else if (id == R.id.nav_ranking && rankingFragment != null) {
+                getSupportFragmentManager().beginTransaction().show(rankingFragment).hide(homeFragment).commit();
+                return true;
             }
-            return true;
+            return false;
         });
-
-        // 초기 화면 설정
-        if (savedInstanceState == null) {
-            getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.main_container, new HomeFragment())
-                    .commit();
-        }
     }
 
     public void checkPermissionsAndStart() {
