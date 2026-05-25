@@ -1,6 +1,9 @@
 package com.example.oss_project;
 
 import android.Manifest;
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.util.Log;
@@ -36,11 +39,11 @@ public class MainActivity extends AppCompatActivity {
 
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        
+
         //ble초기화
         bleManager = new ble();
         bleManager.bleInitialize(this);
-        
+
         // 지도 뷰 설정
         mapView = findViewById(R.id.map_view);
         mapView.start(new MapLifeCycleCallback() {
@@ -76,7 +79,8 @@ public class MainActivity extends AppCompatActivity {
             if (id == R.id.nav_map) {
                 // 지도 탭
             } else if (id == R.id.nav_ranking) {
-                // 랭킹 탭
+                Intent intent = new Intent(MainActivity.this, RankingActivity.class);
+                startActivity(intent);
             } else if (id == R.id.nav_book) {
                 // 도감 탭
             } else if (id == R.id.nav_settings) {
