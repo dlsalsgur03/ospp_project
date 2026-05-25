@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_checked="true">
+        <inset android:drawable="@drawable/bg_nav_selected"
+            android:insetTop="6dp"
+            android:insetBottom="6dp"
+            android:insetLeft="12dp"
+            android:insetRight="12dp" />
+    </item>
+    <item android:drawable="@android:color/transparent" />
+</selector>
