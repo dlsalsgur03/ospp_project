@@ -149,12 +149,15 @@ public class RankingFragment extends Fragment {
     }
 
     private void initRecyclerView() {
+        if (getContext() == null) return;
         adapter = new RankingAdapter(personalItems);
         rvLeaderboard.setLayoutManager(new LinearLayoutManager(getContext()));
         rvLeaderboard.setAdapter(adapter);
     }
 
     private void initClickListeners() {
+        // btnBack 참조 제거 (레이아웃에서 삭제됨)
+
         tabPersonal.setOnClickListener(v -> {
             selectTab(tabPersonal);
             showPersonalRanking();
