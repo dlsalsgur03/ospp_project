@@ -58,6 +58,26 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
                 myLocationManager = new MyLocationManager(getContext(), kakaoMap);
                 sensorMarkerManager = new SensorMarkerManager(getContext(), kakaoMap);
 
+                // 마커 수집 이벤트 리스너 연결
+                sensorMarkerManager.setSensorCollectListener(new SensorMarkerManager.SensorCollectListener() {
+                    @Override
+                    public void onStartScan() {
+                        if (bleManager != null) {
+                            bleManager.startScan();
+                            Log.d("HomeFragment", "BLE 스캔 시작 (수집)");
+                        }
+                    }
+
+                    @Override
+                    public void onStopScanAndUpload(int sensorIndex) {
+                        if (bleManager != null) {
+                            bleManager.stopScan();
+                            Log.d("HomeFragment", "BLE 스캔 중지 및 서버 전송 요청");
+                            // TODO: 여기에 실제 서버 전송 로직(uploadDataToServer) 추가 필요
+                        }
+                    }
+                });
+
                 // 초기 카메라 위치 설정 및 센서 마커 추가
                 kakaoMap.moveCamera(CameraUpdateFactory.newCenterPosition(LatLng.from(currentLat, currentLon), 16));
                 sensorMarkerManager.addSensorMarkers();

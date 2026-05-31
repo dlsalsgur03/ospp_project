@@ -51,6 +51,17 @@ public class SensorMarkerManager {
             "D8:3A:DD:C1:88:BD"   // 센서 5 - 테니스장 건너편
     };
 
+    public interface SensorCollectListener {
+        void onStartScan();
+        void onStopScanAndUpload(int sensorIndex);
+    }
+
+    private SensorCollectListener collectListener;
+
+    public void setSensorCollectListener(SensorCollectListener listener) {
+        this.collectListener = listener;
+    }
+
     public SensorMarkerManager(Context context, KakaoMap kakaoMap) {
         this.context = context;
         this.kakaoMap = kakaoMap;
@@ -129,14 +140,80 @@ public class SensorMarkerManager {
         // 닫기 버튼
         dialog.findViewById(R.id.btn_close).setOnClickListener(v -> dialog.dismiss());
 
-        // 획득 버튼
-        dialog.findViewById(R.id.btn_collect).setOnClickListener(v -> {
-            android.widget.Toast.makeText(context,
-                    SENSOR_NAMES[index] + " 획득!",
-                    android.widget.Toast.LENGTH_SHORT).show();
-            dialog.dismiss();
+        // 획득 버튼 로직 수정
+        android.widget.Button btnCollect = dialog.findViewById(R.id.btn_collect);
+        android.widget.ProgressBar progressCollect = dialog.findViewById(R.id.progress_collect);
+
+        // --- 시간 제한 및 근접 체크 로직 ---
+        android.content.SharedPreferences prefs = context.getSharedPreferences("SensorPrefs", android.content.Context.MODE_PRIVATE);
+        long lastCollectTime = prefs.getLong("last_collect_" + index, 0);
+        long currentTime = System.currentTimeMillis();
+
+        String macAddress = SENSOR_MAC_ADDRESSES[index];
+        boolean isSensorNearby = sensorDataMap.containsKey(macAddress.toUpperCase());
+
+        if (isSameHour(lastCollectTime, currentTime)) {
+            // 이번 정각 내에 이미 수집함
+            btnCollect.setEnabled(false);
+            btnCollect.setText("다음 정각에 수집 가능");
+            btnCollect.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                    android.graphics.Color.parseColor("#9E9E9E"))); // 회색으로 비활성화
+        } else if (!isSensorNearby) {
+            // 신호가 잡히지 않는 경우
+            btnCollect.setEnabled(false);
+            btnCollect.setText("센서 주변이 아닙니다!");
+            btnCollect.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                    android.graphics.Color.parseColor("#9E9E9E"))); // 회색으로 비활성화
+        }
+
+        btnCollect.setOnClickListener(v -> {
+            String currentText = btnCollect.getText().toString();
+
+            if (currentText.equals("획득")) {
+                // 1단계: BLE 스캔 시작 및 로딩 표시
+                btnCollect.setVisibility(android.view.View.GONE);
+                progressCollect.setVisibility(android.view.View.VISIBLE);
+
+                if (collectListener != null) {
+                    collectListener.onStartScan();
+                }
+
+                // 4초간 로딩 (수집 중인 것처럼 연출)
+                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                    progressCollect.setVisibility(android.view.View.GONE);
+                    btnCollect.setVisibility(android.view.View.VISIBLE);
+                    btnCollect.setText("수집 완료");
+                    btnCollect.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                            android.graphics.Color.parseColor("#4CAF50"))); // 초록색으로 변경
+                }, 4000);
+
+            } else if (currentText.equals("수집 완료")) {
+                // 3단계: 수집 완료 클릭 시 (스캔 중지 및 서버 전송)
+                
+                // 현재 시간을 마지막 수집 시간으로 저장 (정각 제한용)
+                prefs.edit().putLong("last_collect_" + index, System.currentTimeMillis()).apply();
+
+                if (collectListener != null) {
+                    collectListener.onStopScanAndUpload(index);
+                }
+                dialog.dismiss();
+            }
         });
 
         dialog.show();
+    }
+
+    // 두 시간이 같은 연도/날짜/시간(Hour)인지 비교하는 헬퍼 함수
+    private boolean isSameHour(long time1, long time2) {
+        if (time1 == 0) return false;
+
+        java.util.Calendar cal1 = java.util.Calendar.getInstance();
+        cal1.setTimeInMillis(time1);
+        java.util.Calendar cal2 = java.util.Calendar.getInstance();
+        cal2.setTimeInMillis(time2);
+
+        return cal1.get(java.util.Calendar.YEAR) == cal2.get(java.util.Calendar.YEAR) &&
+                cal1.get(java.util.Calendar.DAY_OF_YEAR) == cal2.get(java.util.Calendar.DAY_OF_YEAR) &&
+                cal1.get(java.util.Calendar.HOUR_OF_DAY) == cal2.get(java.util.Calendar.HOUR_OF_DAY);
     }
 }
