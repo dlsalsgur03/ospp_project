@@ -28,6 +28,12 @@ public class SensorMarkerManager {
             sensorDataMap.put(data.deviceAddress.toUpperCase(), data);
         }
     }
+
+    // 특정 MAC 주소의 최신 데이터 가져오기
+    public BleDeviceData getSensorData(String macAddress) {
+        if (macAddress == null) return null;
+        return sensorDataMap.get(macAddress.toUpperCase());
+    }
     private static final double[][] SENSOR_POSITIONS = {
             {36.6287545, 127.4579699},
             {36.62933,   127.4575},

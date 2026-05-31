@@ -6,10 +6,15 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
+import android.provider.Settings;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
+import com.example.oss_project.api.RetrofitClient;
+import com.example.oss_project.api.comm_data;
+import com.example.oss_project.api.postdata;
+import com.example.oss_project.api.Response;
 import com.kakao.vectormap.KakaoMap;
 import com.kakao.vectormap.KakaoMapReadyCallback;
 import com.kakao.vectormap.LatLng;
@@ -18,6 +23,9 @@ import com.kakao.vectormap.MapView;
 import com.kakao.vectormap.camera.CameraUpdateFactory;
 
 import java.util.List;
+
+import retrofit2.Call;
+import retrofit2.Callback;
 
 public class HomeFragment extends Fragment implements ble.BleCallback {
 
@@ -73,7 +81,9 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
                         if (bleManager != null) {
                             bleManager.stopScan();
                             Log.d("HomeFragment", "BLE 스캔 중지 및 서버 전송 요청");
-                            // TODO: 여기에 실제 서버 전송 로직(uploadDataToServer) 추가 필요
+                            
+                            // 서버 전송 로직 수행
+                            uploadDataToServer(sensorIndex);
                         }
                     }
                 });
@@ -105,6 +115,63 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
         }
         if (bleManager != null) {
             bleManager.startScan();
+        }
+    }
+
+    private void uploadDataToServer(int sensorIndex) {
+        if (sensorMarkerManager == null || getContext() == null) {
+            Log.e("ServerUpload", "매니저 또는 컨텍스트가 null입니다.");
+            return;
+        }
+
+        // 1. 해당 센서의 MAC 주소 가져오기
+        String macAddress = SensorMarkerManager.SENSOR_MAC_ADDRESSES[sensorIndex];
+        Log.d("ServerUpload", "전송 시도 - 센서 인덱스: " + sensorIndex + ", 목표 MAC: " + macAddress);
+
+        // 2. 수집된 데이터 맵에서 최신 데이터 추출
+        BleDeviceData latestData = sensorMarkerManager.getSensorData(macAddress);
+
+        if (latestData != null) {
+            Log.d("ServerUpload", "데이터 발견! 서버 전송을 시작합니다. (온도: " + latestData.temp + ")");
+            // 3. 서버 전송용 데이터 객체 생성
+            String androidId = Settings.Secure.getString(getContext().getContentResolver(), Settings.Secure.ANDROID_ID);
+            postdata pd = RetrofitClient.makePostData(latestData, currentLat, currentLon, androidId);
+
+            // 4. Retrofit을 이용한 서버 전송
+            comm_data service = RetrofitClient.getClient().create(comm_data.class);
+            service.post_json(pd).enqueue(new Callback<Response>() {
+                @Override
+                public void onResponse(Call<Response> call, retrofit2.Response<Response> response) {
+                    Log.d("ServerUpload", "서버 응답 수신 - 코드: " + response.code());
+                    if (response.isSuccessful() && response.body() != null) {
+                        Log.d("ServerUpload", "성공 메시지: " + response.body().message);
+                        if (getActivity() != null) {
+                            getActivity().runOnUiThread(() -> 
+                                android.widget.Toast.makeText(getContext(), "데이터 전송 성공!", android.widget.Toast.LENGTH_SHORT).show()
+                            );
+                        }
+                    } else {
+                        Log.e("ServerUpload", "전송 실패 (서버 에러)");
+                    }
+                }
+
+                @Override
+                public void onFailure(Call<Response> call, Throwable t) {
+                    Log.e("ServerUpload", "네트워크 실패: " + t.getMessage());
+                    if (getActivity() != null) {
+                        getActivity().runOnUiThread(() ->
+                            android.widget.Toast.makeText(getContext(), "네트워크 에러 발생", android.widget.Toast.LENGTH_SHORT).show()
+                        );
+                    }
+                }
+            });
+        } else {
+            Log.w("ServerUpload", "전송 실패: 수집된 데이터가 없습니다. (MAC: " + macAddress + ")");
+            if (getActivity() != null) {
+                getActivity().runOnUiThread(() ->
+                    android.widget.Toast.makeText(getContext(), "수집된 데이터가 없습니다. 센서 근처에서 다시 시도해주세요.", android.widget.Toast.LENGTH_SHORT).show()
+                );
+            }
         }
     }
 
