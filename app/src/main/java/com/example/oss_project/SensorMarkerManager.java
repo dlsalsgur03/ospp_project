@@ -144,6 +144,19 @@ public class SensorMarkerManager {
         android.widget.Button btnCollect = dialog.findViewById(R.id.btn_collect);
         android.widget.ProgressBar progressCollect = dialog.findViewById(R.id.progress_collect);
 
+        // --- 시간 제한 로직 ---
+        android.content.SharedPreferences prefs = context.getSharedPreferences("SensorPrefs", android.content.Context.MODE_PRIVATE);
+        long lastCollectTime = prefs.getLong("last_collect_" + index, 0);
+        long currentTime = System.currentTimeMillis();
+
+        if (isSameHour(lastCollectTime, currentTime)) {
+            // 이번 정각 내에 이미 수집함
+            btnCollect.setEnabled(false);
+            btnCollect.setText("다음 정각에 수집 가능");
+            btnCollect.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                    android.graphics.Color.parseColor("#9E9E9E"))); // 회색으로 비활성화
+        }
+
         btnCollect.setOnClickListener(v -> {
             String currentText = btnCollect.getText().toString();
 
@@ -167,6 +180,10 @@ public class SensorMarkerManager {
 
             } else if (currentText.equals("수집 완료")) {
                 // 3단계: 수집 완료 클릭 시 (스캔 중지 및 서버 전송)
+                
+                // 현재 시간을 마지막 수집 시간으로 저장 (정각 제한용)
+                prefs.edit().putLong("last_collect_" + index, System.currentTimeMillis()).apply();
+
                 if (collectListener != null) {
                     collectListener.onStopScanAndUpload(index);
                 }
@@ -175,5 +192,19 @@ public class SensorMarkerManager {
         });
 
         dialog.show();
+    }
+
+    // 두 시간이 같은 연도/날짜/시간(Hour)인지 비교하는 헬퍼 함수
+    private boolean isSameHour(long time1, long time2) {
+        if (time1 == 0) return false;
+
+        java.util.Calendar cal1 = java.util.Calendar.getInstance();
+        cal1.setTimeInMillis(time1);
+        java.util.Calendar cal2 = java.util.Calendar.getInstance();
+        cal2.setTimeInMillis(time2);
+
+        return cal1.get(java.util.Calendar.YEAR) == cal2.get(java.util.Calendar.YEAR) &&
+                cal1.get(java.util.Calendar.DAY_OF_YEAR) == cal2.get(java.util.Calendar.DAY_OF_YEAR) &&
+                cal1.get(java.util.Calendar.HOUR_OF_DAY) == cal2.get(java.util.Calendar.HOUR_OF_DAY);
     }
 }
