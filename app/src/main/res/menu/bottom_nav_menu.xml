@@ -13,7 +13,7 @@
         android:icon="@android:drawable/ic_menu_gallery"
         android:title="도감" />
     <item
-        android:id="@+id/nav_settings"
-        android:icon="@android:drawable/ic_menu_manage"
-        android:title="설정" />
+        android:id="@+id/nav_my_info"
+        android:icon="@android:drawable/ic_menu_myplaces"
+        android:title="내 정보" />
 </menu>

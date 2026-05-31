@@ -8,6 +8,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.oss_project.api.ApiResult;
 import com.example.oss_project.api.ApiService;
 import com.example.oss_project.api.Response;
 import com.example.oss_project.api.RetrofitClient;
@@ -53,19 +54,19 @@ public class SignUpActivity extends AppCompatActivity {
         SignUpRequest request = new SignUpRequest(email, password, nickname, college, department);
         ApiService service = RetrofitClient.getClient().create(ApiService.class);
 
-        service.signUp(request).enqueue(new Callback<Response>() {
+        service.signUp(request).enqueue(new Callback<ApiResult<Response>>() {
             @Override
-            public void onResponse(Call<Response> call, retrofit2.Response<Response> response) {
+            public void onResponse(Call<ApiResult<Response>> call, retrofit2.Response<ApiResult<Response>> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     Toast.makeText(SignUpActivity.this, "가입 성공!", Toast.LENGTH_SHORT).show();
                     finish();
                 } else {
-                    Toast.makeText(SignUpActivity.this, "가입 실패: " + response.message(), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(SignUpActivity.this, "가입 실패", Toast.LENGTH_SHORT).show();
                 }
             }
 
             @Override
-            public void onFailure(Call<Response> call, Throwable t) {
+            public void onFailure(Call<ApiResult<Response>> call, Throwable t) {
                 Log.e("SignUp", "에러: " + t.getMessage());
                 Toast.makeText(SignUpActivity.this, "네트워크 연결 실패", Toast.LENGTH_SHORT).show();
             }

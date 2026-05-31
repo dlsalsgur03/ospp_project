@@ -218,10 +218,6 @@ public class ble {
                 String serviceUuid = uuid.toString();
                 String rawHex = bytesToHex(serviceData);
 
-                Log.d("BLE_UUID", "UUID = " + serviceUuid);
-                Log.d("BLE_RAW", "RAW = " + Arrays.toString(serviceData));
-                Log.d("BLE_HEX", "HEX = " + rawHex);
-
                 float temp = 0.0f;
                 float humidity = 0.0f;
                 int aqi = 0;
@@ -252,16 +248,6 @@ public class ble {
                     timeDiffSec = (receivedAt/1000L) - payloadTimestamp;
                     long maxAllowedDiffSec = 60;
                     isTimeValid = Math.abs(timeDiffSec) <= maxAllowedDiffSec;
-
-                    Log.d("BLE_PARSE",
-                            "temp=" + temp +
-                                    ", humidity=" + humidity +
-                                    ", aqi=" + aqi +
-                                    ", tvoc=" + tvoc +
-                                    ", eco2=" + eco2 +
-                                    ", ts=" + payloadTimestamp);
-                } else {
-                    Log.w("BLE_PARSE", "serviceData 길이 부족: " + serviceData.length + " bytes");
                 }
 
                 BleDeviceData bleData = new BleDeviceData(
