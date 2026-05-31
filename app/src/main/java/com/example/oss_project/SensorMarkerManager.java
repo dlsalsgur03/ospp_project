@@ -51,6 +51,17 @@ public class SensorMarkerManager {
             "D8:3A:DD:C1:88:BD"   // 센서 5 - 테니스장 건너편
     };
 
+    public interface SensorCollectListener {
+        void onStartScan();
+        void onStopScanAndUpload(int sensorIndex);
+    }
+
+    private SensorCollectListener collectListener;
+
+    public void setSensorCollectListener(SensorCollectListener listener) {
+        this.collectListener = listener;
+    }
+
     public SensorMarkerManager(Context context, KakaoMap kakaoMap) {
         this.context = context;
         this.kakaoMap = kakaoMap;
@@ -129,12 +140,38 @@ public class SensorMarkerManager {
         // 닫기 버튼
         dialog.findViewById(R.id.btn_close).setOnClickListener(v -> dialog.dismiss());
 
-        // 획득 버튼
-        dialog.findViewById(R.id.btn_collect).setOnClickListener(v -> {
-            android.widget.Toast.makeText(context,
-                    SENSOR_NAMES[index] + " 획득!",
-                    android.widget.Toast.LENGTH_SHORT).show();
-            dialog.dismiss();
+        // 획득 버튼 로직 수정
+        android.widget.Button btnCollect = dialog.findViewById(R.id.btn_collect);
+        android.widget.ProgressBar progressCollect = dialog.findViewById(R.id.progress_collect);
+
+        btnCollect.setOnClickListener(v -> {
+            String currentText = btnCollect.getText().toString();
+
+            if (currentText.equals("획득")) {
+                // 1단계: BLE 스캔 시작 및 로딩 표시
+                btnCollect.setVisibility(android.view.View.GONE);
+                progressCollect.setVisibility(android.view.View.VISIBLE);
+
+                if (collectListener != null) {
+                    collectListener.onStartScan();
+                }
+
+                // 4초간 로딩 (수집 중인 것처럼 연출)
+                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                    progressCollect.setVisibility(android.view.View.GONE);
+                    btnCollect.setVisibility(android.view.View.VISIBLE);
+                    btnCollect.setText("수집 완료");
+                    btnCollect.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                            android.graphics.Color.parseColor("#4CAF50"))); // 초록색으로 변경
+                }, 4000);
+
+            } else if (currentText.equals("수집 완료")) {
+                // 3단계: 수집 완료 클릭 시 (스캔 중지 및 서버 전송)
+                if (collectListener != null) {
+                    collectListener.onStopScanAndUpload(index);
+                }
+                dialog.dismiss();
+            }
         });
 
         dialog.show();
