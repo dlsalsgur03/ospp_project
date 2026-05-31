@@ -99,6 +99,30 @@ public class MyInfoFragment extends Fragment {
     private void handleLogout() {
         if (getContext() == null) return;
 
+        SharedPreferences prefs = getContext().getSharedPreferences("auth_pref", Context.MODE_PRIVATE);
+        String token = prefs.getString("access_token", null);
+
+        if (token != null) {
+            ApiService service = RetrofitClient.getClient().create(ApiService.class);
+            service.logout("Bearer " + token).enqueue(new Callback<ApiResult<Void>>() {
+                @Override
+                public void onResponse(Call<ApiResult<Void>> call, Response<ApiResult<Void>> response) {
+                    performLocalLogout();
+                }
+
+                @Override
+                public void onFailure(Call<ApiResult<Void>> call, Throwable t) {
+                    performLocalLogout();
+                }
+            });
+        } else {
+            performLocalLogout();
+        }
+    }
+
+    private void performLocalLogout() {
+        if (getContext() == null) return;
+
         // 저장된 정보 삭제
         SharedPreferences prefs = getContext().getSharedPreferences("auth_pref", Context.MODE_PRIVATE);
         prefs.edit().clear().apply();

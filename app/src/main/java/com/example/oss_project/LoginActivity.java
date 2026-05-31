@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -24,16 +25,31 @@ public class LoginActivity extends AppCompatActivity {
 
     private EditText etEmail, etPassword;
     private Button btnLogin;
+    private CheckBox cbAutoLogin;
     private TextView tvGoSignUp;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // 자동 로그인 체크
+        SharedPreferences prefs = getSharedPreferences("auth_pref", MODE_PRIVATE);
+        boolean isAutoLogin = prefs.getBoolean("is_auto_login", false);
+        String token = prefs.getString("access_token", null);
+
+        if (isAutoLogin && token != null) {
+            Intent intent = new Intent(this, MainActivity.class);
+            startActivity(intent);
+            finish();
+            return;
+        }
+
         setContentView(R.layout.activity_login);
 
         etEmail = findViewById(R.id.et_login_email);
         etPassword = findViewById(R.id.et_login_password);
         btnLogin = findViewById(R.id.btn_login_submit);
+        cbAutoLogin = findViewById(R.id.cb_auto_login);
         tvGoSignUp = findViewById(R.id.tv_goto_signup);
 
         // 로그인 버튼 클릭 시
@@ -46,7 +62,7 @@ public class LoginActivity extends AppCompatActivity {
                 return;
             }
 
-            performLogin(email, password);
+            performLogin(email, password, cbAutoLogin.isChecked());
         });
 
         // 회원가입 텍스트 클릭 시
@@ -56,7 +72,7 @@ public class LoginActivity extends AppCompatActivity {
         });
     }
 
-    private void performLogin(String email, String password) {
+    private void performLogin(String email, String password, boolean isAutoLoginChecked) {
         LoginRequest request = new LoginRequest(email, password);
         ApiService service = RetrofitClient.getClient().create(ApiService.class);
 
@@ -70,9 +86,12 @@ public class LoginActivity extends AppCompatActivity {
                     if (loginData != null) {
                         String token = loginData.accessToken;
 
-                        // 토큰 저장
+                        // 토큰 저장 및 자동 로그인 설정
                         SharedPreferences prefs = getSharedPreferences("auth_pref", MODE_PRIVATE);
-                        prefs.edit().putString("access_token", token).apply();
+                        SharedPreferences.Editor editor = prefs.edit();
+                        editor.putString("access_token", token);
+                        editor.putBoolean("is_auto_login", isAutoLoginChecked);
+                        editor.apply();
 
                         Toast.makeText(LoginActivity.this, "로그인 성공!", Toast.LENGTH_SHORT).show();
                         

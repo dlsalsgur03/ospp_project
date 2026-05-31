@@ -38,6 +38,14 @@
         android:layout_marginTop="20dp"
         android:backgroundTint="#FFB91858"/>
 
+    <CheckBox
+        android:id="@+id/cb_auto_login"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="자동 로그인"
+        android:layout_gravity="start"
+        android:layout_marginTop="8dp"/>
+
     <TextView
         android:id="@+id/tv_goto_signup"
         android:layout_width="wrap_content"
