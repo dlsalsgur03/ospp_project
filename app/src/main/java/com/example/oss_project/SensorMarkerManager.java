@@ -144,15 +144,24 @@ public class SensorMarkerManager {
         android.widget.Button btnCollect = dialog.findViewById(R.id.btn_collect);
         android.widget.ProgressBar progressCollect = dialog.findViewById(R.id.progress_collect);
 
-        // --- 시간 제한 로직 ---
+        // --- 시간 제한 및 근접 체크 로직 ---
         android.content.SharedPreferences prefs = context.getSharedPreferences("SensorPrefs", android.content.Context.MODE_PRIVATE);
         long lastCollectTime = prefs.getLong("last_collect_" + index, 0);
         long currentTime = System.currentTimeMillis();
+
+        String macAddress = SENSOR_MAC_ADDRESSES[index];
+        boolean isSensorNearby = sensorDataMap.containsKey(macAddress.toUpperCase());
 
         if (isSameHour(lastCollectTime, currentTime)) {
             // 이번 정각 내에 이미 수집함
             btnCollect.setEnabled(false);
             btnCollect.setText("다음 정각에 수집 가능");
+            btnCollect.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                    android.graphics.Color.parseColor("#9E9E9E"))); // 회색으로 비활성화
+        } else if (!isSensorNearby) {
+            // 신호가 잡히지 않는 경우
+            btnCollect.setEnabled(false);
+            btnCollect.setText("센서 주변이 아닙니다!");
             btnCollect.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
                     android.graphics.Color.parseColor("#9E9E9E"))); // 회색으로 비활성화
         }
