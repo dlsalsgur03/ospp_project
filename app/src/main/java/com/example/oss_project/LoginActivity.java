@@ -9,6 +9,15 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.oss_project.api.ApiService;
+import com.example.oss_project.api.LoginRequest;
+import com.example.oss_project.api.LoginResponse;
+import com.example.oss_project.api.RetrofitClient;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
 public class LoginActivity extends AppCompatActivity {
 
     private EditText etEmail, etPassword;
@@ -35,19 +44,42 @@ public class LoginActivity extends AppCompatActivity {
                 return;
             }
 
-            // TODO: 서버 통신 로직 추가 (현재는 임시로 성공 처리)
-            Toast.makeText(this, "로그인 성공!", Toast.LENGTH_SHORT).show();
-            
-            // 메인 화면으로 이동
-            Intent intent = new Intent(LoginActivity.this, MainActivity.class);
-            startActivity(intent);
-            finish(); // 뒤로가기 시 로그인 화면으로 돌아오지 않도록 종료
+            performLogin(email, password);
         });
 
         // 회원가입 텍스트 클릭 시
         tvGoSignUp.setOnClickListener(v -> {
             Intent intent = new Intent(LoginActivity.this, SignUpActivity.class);
             startActivity(intent);
+        });
+    }
+
+    private void performLogin(String email, String password) {
+        LoginRequest request = new LoginRequest(email, password);
+        ApiService service = RetrofitClient.getClient().create(ApiService.class);
+
+        service.login(request).enqueue(new Callback<LoginResponse>() {
+            @Override
+            public void onResponse(Call<LoginResponse> call, Response<LoginResponse> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    LoginResponse loginResponse = response.body();
+                    
+                    // 로그인 성공 시 토큰 저장 및 이동
+                    Toast.makeText(LoginActivity.this, "로그인 성공!", Toast.LENGTH_SHORT).show();
+                    
+                    // 메인 화면으로 이동
+                    Intent intent = new Intent(LoginActivity.this, MainActivity.class);
+                    startActivity(intent);
+                    finish();
+                } else {
+                    Toast.makeText(LoginActivity.this, "이메일 또는 비밀번호가 틀렸습니다.", Toast.LENGTH_SHORT).show();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<LoginResponse> call, Throwable t) {
+                Toast.makeText(LoginActivity.this, "네트워크 연결 실패", Toast.LENGTH_SHORT).show();
+            }
         });
     }
 }
