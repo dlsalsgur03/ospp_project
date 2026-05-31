@@ -28,17 +28,30 @@
         <meta-data
             android:name="com.kakao.maps.open.AppKey"
             android:value="${KAKAO_API_KEY}" />
+
+        <!-- 시작 화면: 로그인 액티비티 -->
         <activity
-            android:name=".MainActivity"
-            android:exported="true" >
+            android:name=".LoginActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <activity android:name=".RankingActivity"
+        <!-- 메인 화면 -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false" />
+
+        <!-- 회원가입 화면 -->
+        <activity
+            android:name=".SignUpActivity"
+            android:exported="false" />
+
+        <!-- 랭킹 화면 (기존) -->
+        <activity
+            android:name=".RankingActivity"
             android:exported="false" />
     </application>
 
