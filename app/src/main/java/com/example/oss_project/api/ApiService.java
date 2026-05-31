@@ -13,6 +13,8 @@ public interface ApiService {
     @POST("api/auth/login")
     Call<ApiResult<LoginResponse>> login(@Body LoginRequest request);
 
+    @POST("api/auth/logout")
+    Call<ApiResult<Void>> logout(@Header("Authorization") String token);
     @GET("api/users/me")
     Call<ApiResult<UserInfoResponse>> getUserInfo(@Header("Authorization") String token);
 }
