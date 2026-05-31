@@ -1,6 +1,7 @@
 package com.example.oss_project;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.EditText;
@@ -9,6 +10,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.oss_project.api.ApiResult;
 import com.example.oss_project.api.ApiService;
 import com.example.oss_project.api.LoginRequest;
 import com.example.oss_project.api.LoginResponse;
@@ -58,26 +60,34 @@ public class LoginActivity extends AppCompatActivity {
         LoginRequest request = new LoginRequest(email, password);
         ApiService service = RetrofitClient.getClient().create(ApiService.class);
 
-        service.login(request).enqueue(new Callback<LoginResponse>() {
+        service.login(request).enqueue(new Callback<ApiResult<LoginResponse>>() {
             @Override
-            public void onResponse(Call<LoginResponse> call, Response<LoginResponse> response) {
+            public void onResponse(Call<ApiResult<LoginResponse>> call, Response<ApiResult<LoginResponse>> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    LoginResponse loginResponse = response.body();
-                    
-                    // 로그인 성공 시 토큰 저장 및 이동
-                    Toast.makeText(LoginActivity.this, "로그인 성공!", Toast.LENGTH_SHORT).show();
-                    
-                    // 메인 화면으로 이동
-                    Intent intent = new Intent(LoginActivity.this, MainActivity.class);
-                    startActivity(intent);
-                    finish();
+                    // 서버 응답의 data 필드에서 진짜 데이터(accessToken 등)를 꺼냄
+                    LoginResponse loginData = response.body().data;
+
+                    if (loginData != null) {
+                        String token = loginData.accessToken;
+
+                        // 토큰 저장
+                        SharedPreferences prefs = getSharedPreferences("auth_pref", MODE_PRIVATE);
+                        prefs.edit().putString("access_token", token).apply();
+
+                        Toast.makeText(LoginActivity.this, "로그인 성공!", Toast.LENGTH_SHORT).show();
+                        
+                        // 메인 화면으로 이동
+                        Intent intent = new Intent(LoginActivity.this, MainActivity.class);
+                        startActivity(intent);
+                        finish();
+                    }
                 } else {
-                    Toast.makeText(LoginActivity.this, "이메일 또는 비밀번호가 틀렸습니다.", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(LoginActivity.this, "로그인 실패: 정보를 확인해주세요.", Toast.LENGTH_SHORT).show();
                 }
             }
 
             @Override
-            public void onFailure(Call<LoginResponse> call, Throwable t) {
+            public void onFailure(Call<ApiResult<LoginResponse>> call, Throwable t) {
                 Toast.makeText(LoginActivity.this, "네트워크 연결 실패", Toast.LENGTH_SHORT).show();
             }
         });

@@ -6,7 +6,7 @@ import com.google.gson.annotations.SerializedName;
 public class LoginResponse {
     @Expose @SerializedName("result") public String result;
     @Expose @SerializedName("message") public String message;
-    @Expose @SerializedName("token") public String token;
+    @Expose @SerializedName("accessToken") public String accessToken;
 
     public boolean isSuccess() {
         return "Success".equalsIgnoreCase(result);
