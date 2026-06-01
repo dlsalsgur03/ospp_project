@@ -8,7 +8,7 @@ import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
 public class RetrofitClient {
-    private static final String BASE_URL = "https://bunkmate-dreamily-anemia.ngrok-free.dev";
+    private static final String BASE_URL = "https://bunkmate-dreamily-anemia.ngrok-free.dev/";
     private static Retrofit retrofit = null;
     private static final String API_KEY = "" ;
 
