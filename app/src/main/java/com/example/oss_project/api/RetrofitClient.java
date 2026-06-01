@@ -8,7 +8,7 @@ import retrofit2.Retrofit;
 import retrofit2.converter.gson.GsonConverterFactory;
 
 public class RetrofitClient {
-    private static final String BASE_URL = "https://bunkmate-dreamily-anemia.ngrok-free.dev";
+    private static final String BASE_URL = "https://bunkmate-dreamily-anemia.ngrok-free.dev/";
     private static Retrofit retrofit = null;
     private static final String API_KEY = "" ;
 
@@ -26,22 +26,23 @@ public class RetrofitClient {
         return retrofit;
     }
 
-    public static postdata makePostData(BleDeviceData ble, double lat, double lon, String sender) {
+    public static postdata makePostData(BleDeviceData ble, double lat, double lon, String sender, Integer characterId) {
         return new postdata(
-                API_KEY,      // key
+                API_KEY,
                 "team 1",
-                ble.deviceName,       // sensor
-                ble.deviceAddress,  // mac
+                ble.deviceName,
+                ble.deviceAddress,
                 ble.temp,
                 ble.humidity,
                 ble.aqi,
                 ble.tvoc,
                 ble.eco2,
                 ble.timestampValue,
-                lat,                // 위도
-                lon,                // 경도
+                lat,
+                lon,
                 sender,
-                ble.rssi// 스마트폰 UUID
+                ble.rssi,
+                characterId
         );
     }
 }

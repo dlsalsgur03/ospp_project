@@ -1,8 +1,6 @@
 package com.example.oss_project.api;
 
 import android.util.Log;
-
-import com.example.oss_project.BleDeviceData;
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
 
@@ -21,11 +19,12 @@ public class postdata {
     @Expose @SerializedName("lat")       private double lat;
     @Expose @SerializedName("lon")       private double lon;
     @Expose @SerializedName("sender")    private String sender;
-    @Expose @SerializedName("rssi") private int rssi;
+    @Expose @SerializedName("rssi")      private int rssi;
+    @Expose @SerializedName("characterId") private Integer characterId;
 
 
     public postdata(String key, String team, String sensor, String mac,
-                    float temp, float humidity, int AQI, int TVOC, int eCO2, long timestamp, double lat, double lon, String sender, int rssi) {
+                    float temp, float humidity, int AQI, int TVOC, int eCO2, long timestamp, double lat, double lon, String sender, int rssi, Integer characterId) {
         this.key = key;
         this.team = team;
         this.sensor = sensor;
@@ -40,19 +39,14 @@ public class postdata {
         this.lon = lon;
         this.sender = sender;
         this.rssi = rssi;
+        this.characterId = characterId;
     }
+
     public void data_show() {
         Log.e("test", key + " " + team + " " + sensor + " " + mac +
                 " temp:" + temp + " humidity:" + humidity +
                 " AQI:" + AQI + " TVOC:" + TVOC + " eCO2:" + eCO2 +
                 " timestamp:" + timestamp + " lat:" + lat + " lon:" + lon +
-                " sender:" + sender + "rssi:" + rssi);
+                " sender:" + sender + " rssi:" + rssi + " charId:" + characterId);
     }
-
-    public float getTemp()      { return temp; }
-    public float getHumidity()  { return humidity; }
-    public int getAQI()         { return AQI; }
-    public int getTVOC()        { return TVOC; }
-    public int getECO2()        { return eCO2; }
-    public long getTimestamp()  { return timestamp; }
 }
