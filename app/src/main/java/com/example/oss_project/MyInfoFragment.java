@@ -18,6 +18,7 @@ import androidx.fragment.app.Fragment;
 
 import com.example.oss_project.api.ApiResult;
 import com.example.oss_project.api.ApiService;
+import com.example.oss_project.api.MyRankingResponse;
 import com.example.oss_project.api.RetrofitClient;
 import com.example.oss_project.api.UserInfoResponse;
 
@@ -27,9 +28,10 @@ import retrofit2.Response;
 
 public class MyInfoFragment extends Fragment {
 
-    private TextView tvEmail, tvNickname, tvCollege, tvDepartment, tvLevel, tvExpLabel;
+    private TextView tvEmail, tvNickname, tvCollege, tvDepartment, tvLevel, tvExpLabel, tvTotalSubmissionCount;
     private ProgressBar pbExp;
     private Button btnLogout;
+    private UserInfoResponse currentUserInfo;
 
     @Nullable
     @Override
@@ -42,6 +44,7 @@ public class MyInfoFragment extends Fragment {
         tvDepartment = view.findViewById(R.id.tv_my_department);
         tvLevel = view.findViewById(R.id.tv_my_level);
         tvExpLabel = view.findViewById(R.id.tv_exp_label);
+        tvTotalSubmissionCount = view.findViewById(R.id.tv_total_submission_count);
         pbExp = view.findViewById(R.id.pb_exp);
         btnLogout = view.findViewById(R.id.btn_logout);
 
@@ -69,7 +72,8 @@ public class MyInfoFragment extends Fragment {
             public void onResponse(Call<ApiResult<UserInfoResponse>> call, Response<ApiResult<UserInfoResponse>> response) {
                 if (response.isSuccessful() && response.body() != null && response.body().data != null) {
                     UserInfoResponse info = response.body().data;
-                    
+                    currentUserInfo = info;
+
                     tvEmail.setText(info.email);
                     tvNickname.setText(info.nickname);
                     tvCollege.setText(info.college);
@@ -79,7 +83,8 @@ public class MyInfoFragment extends Fragment {
                     // EXP 설정 (1000 기준)
                     tvExpLabel.setText("EXP " + info.exp + " / 1000");
                     pbExp.setProgress(info.exp);
-                    
+
+                    fetchMyRanking(token);
                 } else {
                     if (getContext() != null) {
                         Toast.makeText(getContext(), "정보를 불러오지 못했습니다.", Toast.LENGTH_SHORT).show();
@@ -94,6 +99,42 @@ public class MyInfoFragment extends Fragment {
                 }
             }
         });
+    }
+
+    private void fetchMyRanking(String token) {
+        ApiService service = RetrofitClient.getClient().create(ApiService.class);
+        service.getPersonalRanking("Bearer " + token).enqueue(new Callback<ApiResult<MyRankingResponse>>() {
+            @Override
+            public void onResponse(Call<ApiResult<MyRankingResponse>> call, Response<ApiResult<MyRankingResponse>> response) {
+                if (response.isSuccessful() && response.body() != null && response.body().data != null) {
+                    bindMyRanking(response.body().data);
+                }
+            }
+
+            @Override
+            public void onFailure(Call<ApiResult<MyRankingResponse>> call, Throwable t) {
+                if (getContext() != null) {
+                    Toast.makeText(getContext(), "랭킹 정보를 불러오지 못했습니다.", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+    }
+
+    private void bindMyRanking(MyRankingResponse ranking) {
+        if (currentUserInfo == null) return;
+
+        tvNickname.setText(currentUserInfo.nickname + formatRank(ranking.overallRank));
+        tvCollege.setText(currentUserInfo.college + formatRank(ranking.collegeRank));
+        tvDepartment.setText(currentUserInfo.department + formatRank(ranking.departmentRank));
+
+        if (ranking.totalSubmissionCount != null) {
+            tvTotalSubmissionCount.setText("총 제출 " + ranking.totalSubmissionCount + "회");
+        }
+    }
+
+    private String formatRank(Integer rank) {
+        if (rank == null || rank <= 0) return "";
+        return " (" + rank + "위)";
     }
 
     private void handleLogout() {

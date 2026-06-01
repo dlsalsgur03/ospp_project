@@ -79,6 +79,15 @@
                 android:progress="0"
                 android:progressDrawable="@drawable/bg_exp_progress" />
 
+            <TextView
+                android:id="@+id/tv_total_submission_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="총 제출 0회"
+                android:textColor="#888888"
+                android:textSize="12sp" />
+
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
