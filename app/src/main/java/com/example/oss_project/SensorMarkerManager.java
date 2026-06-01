@@ -144,7 +144,8 @@ public class SensorMarkerManager {
         android.widget.Button btnCollect = dialog.findViewById(R.id.btn_collect);
         android.widget.ProgressBar progressCollect = dialog.findViewById(R.id.progress_collect);
 
-        // --- 시간 제한 및 근접 체크 로직 ---
+        // --- 시간 제한 및 근접 체크 로직 (테스트를 위해 일시 비활성화) ---
+        /*
         android.content.SharedPreferences prefs = context.getSharedPreferences("SensorPrefs", android.content.Context.MODE_PRIVATE);
         long lastCollectTime = prefs.getLong("last_collect_" + index, 0);
         long currentTime = System.currentTimeMillis();
@@ -165,6 +166,7 @@ public class SensorMarkerManager {
             btnCollect.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
                     android.graphics.Color.parseColor("#9E9E9E"))); // 회색으로 비활성화
         }
+        */
 
         btnCollect.setOnClickListener(v -> {
             String currentText = btnCollect.getText().toString();
@@ -190,8 +192,9 @@ public class SensorMarkerManager {
             } else if (currentText.equals("수집 완료")) {
                 // 3단계: 수집 완료 클릭 시 (스캔 중지 및 서버 전송)
                 
-                // 현재 시간을 마지막 수집 시간으로 저장 (정각 제한용)
-                prefs.edit().putLong("last_collect_" + index, System.currentTimeMillis()).apply();
+                // 현재 시간을 마지막 수집 시간으로 저장 (테스트를 위해 일시 비활성화)
+                // android.content.SharedPreferences prefs = context.getSharedPreferences("SensorPrefs", android.content.Context.MODE_PRIVATE);
+                // prefs.edit().putLong("last_collect_" + index, System.currentTimeMillis()).apply();
 
                 if (collectListener != null) {
                     collectListener.onStopScanAndUpload(index);

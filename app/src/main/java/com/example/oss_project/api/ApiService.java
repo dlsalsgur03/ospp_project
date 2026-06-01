@@ -17,4 +17,7 @@ public interface ApiService {
     Call<ApiResult<Void>> logout(@Header("Authorization") String token);
     @GET("api/users/me")
     Call<ApiResult<UserInfoResponse>> getUserInfo(@Header("Authorization") String token);
+
+    @GET("api/users/me/characters/dex")
+    Call<ApiResult<DexData>> getCharacterDex(@Header("Authorization") String token);
 }
