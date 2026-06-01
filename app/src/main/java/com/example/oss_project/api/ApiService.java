@@ -15,6 +15,19 @@ public interface ApiService {
 
     @POST("api/auth/logout")
     Call<ApiResult<Void>> logout(@Header("Authorization") String token);
+
+    @GET("api/rankings/me")
+    Call<ApiResult<MyRankingResponse>> getPersonalRanking(@Header("Authorization") String token);
+
+    @GET("api/rankings/users")
+    Call<ApiResult<UserRankingListResponse>> getUsersRanking(@Header("Authorization") String token);
+
+    @GET("api/rankings/colleges")
+    Call<ApiResult<CollegeRankingListResponse>> getCollegeRanking(@Header("Authorization") String token);
+
+    @GET("api/rankings/departments")
+    Call<ApiResult<DepartmentRankingListResponse>> getDepartmentRanking(@Header("Authorization") String token);
+
     @GET("api/users/me")
     Call<ApiResult<UserInfoResponse>> getUserInfo(@Header("Authorization") String token);
 
