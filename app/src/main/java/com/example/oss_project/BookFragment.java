@@ -121,6 +121,20 @@ public class BookFragment extends Fragment {
         });
     }
 
+    public void refreshDexData() {
+        if (isAdded()) {
+            fetchDexData();
+        }
+    }
+
+    @Override
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        if (!hidden) {
+            refreshDexData();
+        }
+    }
+
     private void filterList() {
         if (allItems == null) return;
 

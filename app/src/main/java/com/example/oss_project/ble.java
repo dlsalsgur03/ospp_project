@@ -1,501 +1,499 @@
 package com.example.oss_project;
 
 import android.Manifest;
+import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
-import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.content.pm.PackageManager;
-import android.os.Environment;
 import android.os.ParcelUuid;
 import android.util.Log;
 
 import androidx.core.app.ActivityCompat;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 public class ble {
+    private static final String TAG = "BLE_SCAN";
+    private static final ParcelUuid ENVIRONMENTAL_SENSOR_UUID =
+            ParcelUuid.fromString("0000181a-0000-1000-8000-00805f9b34fb");
+
     public interface BleCallback {
         void onFilteredBleDataUpdated(List<BleDeviceData> dataList, List<String> discoveredUuids);
         void runOnUiThread(Runnable action);
-        android.app.Activity getBleActivity();
+        Activity getBleActivity();
     }
 
     private BleCallback callback;
+    private BluetoothAdapter bluetoothAdapter;
     private BluetoothLeScanner bluetoothLeScanner;
+    private boolean scanning = false;
+    private boolean legacyScanning = false;
 
-    // 최신 상태 저장용: 같은 장치 + 같은 UUID는 최신값으로 갱신
-    private final Map<String, BleDeviceData> scannedDataMap = new HashMap<>();
-
-    // 누적 저장용: 들어온 모든 기록 저장
-    private final List<BleDeviceData> scanHistoryList = new ArrayList<>();
-
-    // UI 필터 상태
-    private String selectedUuidFilter = null;   // null 또는 ""이면 전체
-    private String nameKeywordFilter = "";
-    private Integer minRssiFilter = null;
+    private final Map<String, BleDeviceData> latestEnvironmentalData = new HashMap<>();
+    private int environmentalScanCount = 0;
 
     public void bleInitialize(BleCallback callback) {
         this.callback = callback;
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-        if (adapter != null) {
-            this.bluetoothLeScanner = adapter.getBluetoothLeScanner();
-        }
+        refreshBluetoothObjects();
+        Log.d(TAG, "BLE manager initialized");
     }
 
     public void startScan() {
-        if (bluetoothLeScanner == null) return;
-
-        if (callback == null || ActivityCompat.checkSelfPermission(callback.getBleActivity(), Manifest.permission.BLUETOOTH_SCAN)
-                != PackageManager.PERMISSION_GRANTED) {
+        Activity activity = getActivity();
+        if (activity == null) {
+            Log.d(TAG, "startScan skipped: Activity is null");
             return;
         }
 
-        ScanSettings scanSettings = new ScanSettings.Builder()
+        if (scanning || legacyScanning) {
+            Log.d(TAG, "startScan skipped: already scanning");
+            return;
+        }
+
+        if (!hasPermission(activity, Manifest.permission.BLUETOOTH_SCAN)) {
+            Log.d(TAG, "startScan failed: BLUETOOTH_SCAN permission missing");
+            return;
+        }
+
+        if (!refreshBluetoothObjects()) {
+            return;
+        }
+
+        ScanSettings settings = new ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
                 .build();
 
-        List<ScanFilter> filters = new ArrayList<>();
-        bluetoothLeScanner.startScan(filters, scanSettings, scanCallback);
-
-        Log.d("BLE_SCAN", "BLE 전체 스캔 시작");
+        try {
+            bluetoothLeScanner.startScan(null, settings, scanCallback);
+            scanning = true;
+            environmentalScanCount = 0;
+            Log.d(TAG, "BLE scan started. environmentalUuid=" + ENVIRONMENTAL_SENSOR_UUID);
+        } catch (Exception e) {
+            Log.e(TAG, "BLE scanner start failed. Trying legacy scan.", e);
+            startLegacyScan();
+        }
     }
 
     public void stopScan() {
-        if (bluetoothLeScanner != null && callback != null
-                && ActivityCompat.checkSelfPermission(callback.getBleActivity(), Manifest.permission.BLUETOOTH_SCAN)
-                == PackageManager.PERMISSION_GRANTED) {
-            bluetoothLeScanner.stopScan(scanCallback);
-            Log.d("BLE_SCAN", "BLE 스캔 중지");
-        }
-    }
+        Activity activity = getActivity();
 
-    public void clearScannedData() {
-        scannedDataMap.clear();
-        scanHistoryList.clear();
-        notifyFilteredDataToUi();
-    }
-
-    public void setUuidFilter(String uuid) {
-        this.selectedUuidFilter = uuid;
-        notifyFilteredDataToUi();
-    }
-
-    public void setNameKeywordFilter(String keyword) {
-        this.nameKeywordFilter = keyword != null ? keyword.trim() : "";
-        notifyFilteredDataToUi();
-    }
-
-    public void setMinRssiFilter(Integer minRssi) {
-        this.minRssiFilter = minRssi;
-        notifyFilteredDataToUi();
-    }
-
-    public List<String> getDiscoveredUuids() {
-        List<String> result = new ArrayList<>();
-        for (BleDeviceData data : scannedDataMap.values()) {
-            if (data.serviceUuid != null && !result.contains(data.serviceUuid)) {
-                result.add(data.serviceUuid);
+        if (activity != null && hasPermission(activity, Manifest.permission.BLUETOOTH_SCAN)) {
+            if (bluetoothLeScanner != null && scanning) {
+                try {
+                    bluetoothLeScanner.stopScan(scanCallback);
+                } catch (Exception e) {
+                    Log.e(TAG, "BLE scanner stop failed", e);
+                }
             }
-        }
-        return result;
-    }
 
-    private List<BleDeviceData> getFilteredDataList() {
-        List<BleDeviceData> filteredList = new ArrayList<>();
-
-        for (BleDeviceData data : scannedDataMap.values()) {
-            if (matchesFilter(data)) {
-                filteredList.add(data);
+            if (bluetoothAdapter != null && legacyScanning) {
+                try {
+                    bluetoothAdapter.stopLeScan(legacyScanCallback);
+                } catch (Exception e) {
+                    Log.e(TAG, "Legacy BLE scan stop failed", e);
+                }
             }
         }
 
-        return filteredList;
+        scanning = false;
+        legacyScanning = false;
+        Log.d(TAG, "BLE scan stopped. environmentalCount=" + environmentalScanCount);
     }
 
-    private boolean matchesFilter(BleDeviceData data) {
-        if (data == null) return false;
+    private final ScanCallback scanCallback = new ScanCallback() {
+        @Override
+        public void onScanResult(int callbackType, ScanResult result) {
+            Activity activity = getActivity();
+            if (activity == null) {
+                Log.d(TAG, "scan result ignored: Activity is null");
+                return;
+            }
 
-        if (selectedUuidFilter != null && !selectedUuidFilter.isEmpty()) {
-            if (!selectedUuidFilter.equalsIgnoreCase(data.serviceUuid)) {
-                return false;
+            if (!hasPermission(activity, Manifest.permission.BLUETOOTH_CONNECT)) {
+                Log.d(TAG, "scan result ignored: BLUETOOTH_CONNECT permission missing");
+                return;
+            }
+
+            BluetoothDevice device = result.getDevice();
+            ScanRecord record = result.getScanRecord();
+            int rssi = result.getRssi();
+
+            if (record == null) {
+                Log.d(TAG, "scan result ignored: ScanRecord is null, rssi=" + rssi);
+                return;
+            }
+
+            String deviceAddress = getDeviceAddress(device);
+            String deviceName = getDeviceName(device, record.getDeviceName());
+            Integer txPower = record.getTxPowerLevel() != Integer.MIN_VALUE
+                    ? record.getTxPowerLevel()
+                    : null;
+            Map<ParcelUuid, byte[]> serviceDataMap = record.getServiceData();
+
+            Log.d(TAG, "scan result"
+                    + ": source=scanner"
+                    + ", mac=" + deviceAddress
+                    + ", name=" + deviceName
+                    + ", rssi=" + rssi
+                    + ", txPower=" + txPower
+                    + ", serviceUuids=" + record.getServiceUuids()
+                    + ", serviceData=" + serviceDataToString(serviceDataMap)
+                    + ", raw=" + bytesToHex(record.getBytes()));
+
+            handleServiceData(deviceAddress, deviceName, rssi, txPower, serviceDataMap, "scanner");
+        }
+
+        @Override
+        public void onScanFailed(int errorCode) {
+            scanning = false;
+            Log.e(TAG, "BLE scan failed: errorCode=" + errorCode + ", reason=" + scanFailureReason(errorCode));
+
+            if (errorCode == ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED) {
+                startLegacyScan();
+            }
+        }
+    };
+
+    private final BluetoothAdapter.LeScanCallback legacyScanCallback = (device, rssi, scanRecordBytes) -> {
+        Activity activity = getActivity();
+        if (activity == null) {
+            Log.d(TAG, "legacy scan result ignored: Activity is null");
+            return;
+        }
+
+        if (!hasPermission(activity, Manifest.permission.BLUETOOTH_CONNECT)) {
+            Log.d(TAG, "legacy scan result ignored: BLUETOOTH_CONNECT permission missing");
+            return;
+        }
+
+        String deviceAddress = getDeviceAddress(device);
+        LegacyAdvertisement advertisement = parseLegacyAdvertisement(scanRecordBytes);
+        String deviceName = getDeviceName(device, advertisement.name);
+
+        Log.d(TAG, "scan result"
+                + ": source=legacy"
+                + ", mac=" + deviceAddress
+                + ", name=" + deviceName
+                + ", rssi=" + rssi
+                + ", txPower=" + advertisement.txPower
+                + ", serviceUuids=" + advertisement.serviceUuids
+                + ", serviceData=" + serviceDataToString(advertisement.serviceDataMap)
+                + ", raw=" + bytesToHex(scanRecordBytes));
+
+        handleServiceData(
+                deviceAddress,
+                deviceName,
+                rssi,
+                advertisement.txPower,
+                advertisement.serviceDataMap,
+                "legacy"
+        );
+    };
+
+    private void startLegacyScan() {
+        Activity activity = getActivity();
+        if (activity == null) {
+            Log.d(TAG, "legacy scan skipped: Activity is null");
+            return;
+        }
+
+        if (!hasPermission(activity, Manifest.permission.BLUETOOTH_SCAN)) {
+            Log.d(TAG, "legacy scan failed: BLUETOOTH_SCAN permission missing");
+            return;
+        }
+
+        if (bluetoothAdapter == null && !refreshBluetoothObjects()) {
+            return;
+        }
+
+        try {
+            boolean started = bluetoothAdapter.startLeScan(legacyScanCallback);
+            legacyScanning = started;
+            environmentalScanCount = 0;
+            Log.d(TAG, started
+                    ? "Legacy BLE scan started"
+                    : "Legacy BLE scan failed: startLeScan returned false");
+        } catch (Exception e) {
+            legacyScanning = false;
+            Log.e(TAG, "Legacy BLE scan start failed", e);
+        }
+    }
+
+    private void handleServiceData(String deviceAddress, String deviceName, int rssi, Integer txPower,
+                                   Map<ParcelUuid, byte[]> serviceDataMap, String source) {
+        if (serviceDataMap == null || serviceDataMap.isEmpty()) {
+            return;
+        }
+
+        boolean updated = false;
+        for (Map.Entry<ParcelUuid, byte[]> entry : serviceDataMap.entrySet()) {
+            ParcelUuid uuid = entry.getKey();
+            byte[] serviceData = entry.getValue();
+
+            if (!ENVIRONMENTAL_SENSOR_UUID.equals(uuid)) {
+                continue;
+            }
+
+            if (serviceData == null) {
+                continue;
+            }
+
+            BleDeviceData data = parseEnvironmentalSensorData(
+                    deviceAddress,
+                    deviceName,
+                    uuid.toString(),
+                    serviceData,
+                    rssi,
+                    txPower
+            );
+
+            latestEnvironmentalData.put(deviceAddress + "_" + uuid, data);
+            environmentalScanCount++;
+            updated = true;
+
+            Log.d(TAG, "environmental sensor found"
+                    + ": source=" + source
+                    + ", count=" + environmentalScanCount
+                    + ", mac=" + data.deviceAddress
+                    + ", name=" + data.deviceName
+                    + ", rssi=" + data.rssi
+                    + ", uuid=" + data.serviceUuid
+                    + ", rawHex=" + data.rawHex
+                    + ", temp=" + data.temp
+                    + ", humidity=" + data.humidity
+                    + ", aqi=" + data.aqi
+                    + ", tvoc=" + data.tvoc
+                    + ", eco2=" + data.eco2
+                    + ", timestamp=" + data.timestampValue
+                    + ", timeValid=" + data.isTimeValid);
+        }
+
+        if (updated) {
+            notifyDataUpdated();
+        }
+    }
+
+    private BleDeviceData parseEnvironmentalSensorData(String deviceAddress, String deviceName,
+                                                       String serviceUuid, byte[] serviceData,
+                                                       int rssi, Integer txPower) {
+        float temp = 0.0f;
+        float humidity = 0.0f;
+        int aqi = 0;
+        int tvoc = 0;
+        int eco2 = 0;
+        long payloadTimestamp = 0L;
+        long timeDiffSec = 0L;
+        boolean isTimeValid = false;
+
+        if (serviceData.length >= 13) {
+            short tempRaw = (short) (((serviceData[1] & 0xFF) << 8) | (serviceData[0] & 0xFF));
+            int humidityRaw = ((serviceData[3] & 0xFF) << 8) | (serviceData[2] & 0xFF);
+            aqi = serviceData[4] & 0xFF;
+            tvoc = ((serviceData[6] & 0xFF) << 8) | (serviceData[5] & 0xFF);
+            eco2 = ((serviceData[8] & 0xFF) << 8) | (serviceData[7] & 0xFF);
+            payloadTimestamp =
+                    ((long) (serviceData[12] & 0xFF) << 24) |
+                            ((long) (serviceData[11] & 0xFF) << 16) |
+                            ((long) (serviceData[10] & 0xFF) << 8) |
+                            ((long) (serviceData[9] & 0xFF));
+
+            temp = tempRaw / 100.0f;
+            humidity = humidityRaw / 100.0f;
+            timeDiffSec = (System.currentTimeMillis() / 1000L) - payloadTimestamp;
+            isTimeValid = Math.abs(timeDiffSec) <= 60;
+        } else {
+            Log.w(TAG, "environmental serviceData too short"
+                    + ": bytes=" + serviceData.length
+                    + ", rawHex=" + bytesToHex(serviceData));
+        }
+
+        Integer pathLoss = txPower != null ? txPower - rssi : null;
+        return new BleDeviceData(
+                deviceAddress,
+                deviceName,
+                serviceUuid,
+                bytesToHex(serviceData),
+                serviceData,
+                rssi,
+                temp,
+                humidity,
+                aqi,
+                tvoc,
+                eco2,
+                payloadTimestamp,
+                System.currentTimeMillis(),
+                txPower,
+                pathLoss,
+                timeDiffSec,
+                isTimeValid
+        );
+    }
+
+    private void notifyDataUpdated() {
+        if (callback == null) return;
+
+        List<BleDeviceData> dataList = new ArrayList<>(latestEnvironmentalData.values());
+        List<String> discoveredUuids = new ArrayList<>();
+        for (BleDeviceData data : dataList) {
+            if (data.serviceUuid != null && !discoveredUuids.contains(data.serviceUuid)) {
+                discoveredUuids.add(data.serviceUuid);
             }
         }
 
-        if (nameKeywordFilter != null && !nameKeywordFilter.isEmpty()) {
-            String keyword = nameKeywordFilter.toLowerCase();
-            String deviceName = data.deviceName != null ? data.deviceName.toLowerCase() : "";
-            if (!deviceName.contains(keyword)) {
-                return false;
-            }
+        callback.runOnUiThread(() -> callback.onFilteredBleDataUpdated(dataList, discoveredUuids));
+    }
+
+    private boolean refreshBluetoothObjects() {
+        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        if (bluetoothAdapter == null) {
+            Log.d(TAG, "BluetoothAdapter is null");
+            bluetoothLeScanner = null;
+            return false;
         }
 
-        if (minRssiFilter != null && data.rssi < minRssiFilter) {
+        if (!bluetoothAdapter.isEnabled()) {
+            Log.d(TAG, "Bluetooth is disabled");
+            bluetoothLeScanner = null;
+            return false;
+        }
+
+        bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
+        if (bluetoothLeScanner == null) {
+            Log.d(TAG, "BluetoothLeScanner is null");
             return false;
         }
 
         return true;
     }
 
-    private void notifyFilteredDataToUi() {
-        if (callback == null) return;
-        List<BleDeviceData> filteredList = getFilteredDataList();
-        callback.runOnUiThread(() -> {
-            callback.onFilteredBleDataUpdated(filteredList, getDiscoveredUuids());
-        });
+    private LegacyAdvertisement parseLegacyAdvertisement(byte[] bytes) {
+        LegacyAdvertisement advertisement = new LegacyAdvertisement();
+        if (bytes == null) return advertisement;
+
+        int index = 0;
+        while (index < bytes.length) {
+            int length = bytes[index++] & 0xFF;
+            if (length == 0) break;
+            if (index + length > bytes.length) break;
+
+            int type = bytes[index++] & 0xFF;
+            int dataStart = index;
+            int dataLength = length - 1;
+
+            if (type == 0x08 || type == 0x09) {
+                advertisement.name = new String(bytes, dataStart, dataLength);
+            } else if (type == 0x0A && dataLength >= 1) {
+                advertisement.txPower = (int) bytes[dataStart];
+            } else if (type == 0x02 || type == 0x03) {
+                parse16BitServiceUuids(bytes, dataStart, dataLength, advertisement.serviceUuids);
+            } else if (type == 0x16) {
+                parse16BitServiceData(bytes, dataStart, dataLength, advertisement.serviceDataMap);
+            }
+
+            index = dataStart + dataLength;
+        }
+
+        return advertisement;
     }
 
-    private final ScanCallback scanCallback = new ScanCallback() {
-        @Override
-        public void onScanResult(int callbackType, ScanResult result) {
-            if (callback == null) return;
-            BluetoothDevice device = result.getDevice();
-            if (device == null) return;
-
-            if (ActivityCompat.checkSelfPermission(callback.getBleActivity(), Manifest.permission.BLUETOOTH_CONNECT)
-                    != PackageManager.PERMISSION_GRANTED) {
-                return;
-            }
-
-            String deviceAddress = device.getAddress() != null
-                    ? device.getAddress().toUpperCase()
-                    : "UNKNOWN";
-
-            int rssi = result.getRssi();
-
-            ScanRecord scanRecord = result.getScanRecord();
-            if (scanRecord == null) return;
-
-            Integer txPower = null;
-            Integer pathloss = null;
-
-            int txPowerLevel = scanRecord.getTxPowerLevel();
-
-            if(txPowerLevel != Integer.MIN_VALUE) {
-                txPower = txPowerLevel;
-                pathloss = txPower - rssi;
-            }
-
-            String name = "Unknown";
-
-// 1순위: 광고 패킷 안 이름
-            String advName = scanRecord.getDeviceName();
-            if (advName != null && !advName.trim().isEmpty()) {
-                name = advName;
-            }
-
-// 2순위: 시스템이 알고 있는 이름
-            if ("Unknown".equals(name)) {
-                String deviceName = device.getName();
-                if (deviceName != null && !deviceName.trim().isEmpty()) {
-                    name = deviceName;
-                }
-            }
-
-            Map<ParcelUuid, byte[]> serviceDataMap = scanRecord.getServiceData();
-            if (serviceDataMap == null || serviceDataMap.isEmpty()) return;
-
-            for (Map.Entry<ParcelUuid, byte[]> entry : serviceDataMap.entrySet()) {
-                ParcelUuid uuid = entry.getKey();
-                byte[] serviceData = entry.getValue();
-
-                if (uuid == null || serviceData == null) continue;
-
-                String serviceUuid = uuid.toString();
-                String rawHex = bytesToHex(serviceData);
-
-                float temp = 0.0f;
-                float humidity = 0.0f;
-                int aqi = 0;
-                int tvoc = 0;
-                int eco2 = 0;
-                long payloadTimestamp = 0L;
-                long timeDiffSec = 0L;
-                boolean isTimeValid = false;
-
-
-                if (serviceData.length >= 13) {
-                    short tempRaw = (short) (((serviceData[1] & 0xFF) << 8) | (serviceData[0] & 0xFF));
-                    int humidityRaw = ((serviceData[3] & 0xFF) << 8) | (serviceData[2] & 0xFF);
-                    aqi = serviceData[4] & 0xFF;
-                    tvoc = ((serviceData[6] & 0xFF) << 8) | (serviceData[5] & 0xFF);
-                    eco2 = ((serviceData[8] & 0xFF) << 8) | (serviceData[7] & 0xFF);
-
-                    payloadTimestamp =
-                            ((long) (serviceData[12] & 0xFF) << 24) |
-                                    ((long) (serviceData[11] & 0xFF) << 16) |
-                                    ((long) (serviceData[10] & 0xFF) << 8) |
-                                    ((long) (serviceData[9] & 0xFF));
-
-                    temp = tempRaw / 100.0f;
-                    humidity = humidityRaw / 100.0f;
-
-                    long receivedAt = System.currentTimeMillis();
-                    timeDiffSec = (receivedAt/1000L) - payloadTimestamp;
-                    long maxAllowedDiffSec = 60;
-                    isTimeValid = Math.abs(timeDiffSec) <= maxAllowedDiffSec;
-                }
-
-                BleDeviceData bleData = new BleDeviceData(
-                        deviceAddress,
-                        name,
-                        serviceUuid,
-                        rawHex,
-                        serviceData,
-                        rssi,
-                        temp,
-                        humidity,
-                        aqi,
-                        tvoc,
-                        eco2,
-                        payloadTimestamp,
-                        System.currentTimeMillis(),
-                        txPower,
-                        pathloss,
-                        timeDiffSec,
-                        isTimeValid
-                );
-
-                String key = deviceAddress + "_" + serviceUuid;
-
-                // 최신 상태 저장
-                scannedDataMap.put(key, bleData);
-
-                // 누적 이력 저장
-                scanHistoryList.add(bleData);
-            }
-
-            notifyFilteredDataToUi();
+    private void parse16BitServiceUuids(byte[] bytes, int start, int length, List<ParcelUuid> output) {
+        for (int i = start; i + 1 < start + length; i += 2) {
+            int uuid16 = (bytes[i] & 0xFF) | ((bytes[i + 1] & 0xFF) << 8);
+            output.add(ParcelUuid.fromString(String.format(Locale.US,
+                    "0000%04x-0000-1000-8000-00805f9b34fb", uuid16)));
         }
-    };
+    }
+
+    private void parse16BitServiceData(byte[] bytes, int start, int length,
+                                       Map<ParcelUuid, byte[]> output) {
+        if (length < 2) return;
+
+        int uuid16 = (bytes[start] & 0xFF) | ((bytes[start + 1] & 0xFF) << 8);
+        ParcelUuid uuid = ParcelUuid.fromString(String.format(Locale.US,
+                "0000%04x-0000-1000-8000-00805f9b34fb", uuid16));
+
+        byte[] serviceData = new byte[length - 2];
+        System.arraycopy(bytes, start + 2, serviceData, 0, serviceData.length);
+        output.put(uuid, serviceData);
+    }
+
+    private Activity getActivity() {
+        return callback != null ? callback.getBleActivity() : null;
+    }
+
+    private boolean hasPermission(Activity activity, String permission) {
+        return ActivityCompat.checkSelfPermission(activity, permission) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private String getDeviceAddress(BluetoothDevice device) {
+        if (device == null || device.getAddress() == null) return "UNKNOWN";
+        return device.getAddress().toUpperCase(Locale.US);
+    }
+
+    private String getDeviceName(BluetoothDevice device, String advertisedName) {
+        if (advertisedName != null && !advertisedName.trim().isEmpty()) {
+            return advertisedName;
+        }
+
+        if (device != null && device.getName() != null && !device.getName().trim().isEmpty()) {
+            return device.getName();
+        }
+
+        return "Unknown";
+    }
+
+    private String scanFailureReason(int errorCode) {
+        switch (errorCode) {
+            case ScanCallback.SCAN_FAILED_ALREADY_STARTED:
+                return "ALREADY_STARTED";
+            case ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED:
+                return "APPLICATION_REGISTRATION_FAILED";
+            case ScanCallback.SCAN_FAILED_INTERNAL_ERROR:
+                return "INTERNAL_ERROR";
+            case ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED:
+                return "FEATURE_UNSUPPORTED";
+            default:
+                return "UNKNOWN";
+        }
+    }
+
+    private String serviceDataToString(Map<ParcelUuid, byte[]> serviceDataMap) {
+        if (serviceDataMap == null || serviceDataMap.isEmpty()) return "{}";
+
+        StringBuilder sb = new StringBuilder("{");
+        boolean first = true;
+        for (Map.Entry<ParcelUuid, byte[]> entry : serviceDataMap.entrySet()) {
+            if (!first) sb.append(", ");
+            first = false;
+            sb.append(entry.getKey()).append("=").append(bytesToHex(entry.getValue()));
+        }
+        sb.append("}");
+        return sb.toString();
+    }
 
     private String bytesToHex(byte[] bytes) {
         if (bytes == null || bytes.length == 0) return "";
 
         StringBuilder sb = new StringBuilder();
         for (byte b : bytes) {
-            sb.append(String.format(Locale.getDefault(), "%02X ", b));
+            sb.append(String.format(Locale.US, "%02X ", b));
         }
         return sb.toString().trim();
     }
 
-    private String getServiceNameFromUuid(String uuid) {
-        if (uuid == null) return "Unknown_Service";
-
-        if (uuid.equalsIgnoreCase("0000181a-0000-1000-8000-00805f9b34fb")) {
-            return "Environmental_Sensing";
-        } else if (uuid.equalsIgnoreCase("12345678-1234-5678-1234-56789abcdef0")) {
-            return "Custom_Sensor_Service";
-        }
-
-        return "Unknown_Service";
-    }
-
-    private String sanitizeFileName(String name) {
-        if (name == null || name.trim().isEmpty()) return "Unknown_Service";
-        return name.replaceAll("[\\\\/:*?\"<>|\\s]+", "_");
-    }
-
-    private String escapeCsv(String value) {
-        if (value == null) return "";
-        String escaped = value.replace("\"", "\"\"");
-        return "\"" + escaped + "\"";
-    }
-
-    // 최신 필터 결과 저장: 현재 화면의 최신값들
-    public void saveFilteredDataToCsv() {
-        List<BleDeviceData> filteredList = getFilteredDataList();
-
-        if (filteredList.isEmpty()) {
-            Log.d("BLE_CSV", "저장할 필터링 데이터가 없음");
-            return;
-        }
-
-        // UUID 필터가 없으면 파일명과 내용이 섞일 수 있어서 저장 막음
-        String uuidForFile = selectedUuidFilter;
-        if (uuidForFile == null || uuidForFile.trim().isEmpty()) {
-            Log.d("BLE_CSV", "UUID 필터를 먼저 선택해야 저장 가능");
-            return;
-        }
-
-        List<BleDeviceData> unsavedLatest = new ArrayList<>();
-        for (BleDeviceData data : filteredList) {
-            if (!data.savedToCsv) {
-                unsavedLatest.add(data);
-            }
-        }
-
-        if (unsavedLatest.isEmpty()) {
-            Log.d("BLE_CSV", "새로 저장할 최신 데이터가 없음");
-            return;
-        }
-
-        saveListToCsv(unsavedLatest, uuidForFile);
-    }
-
-    // 누적 이력 저장: 아직 저장 안 된 것만 저장
-    public void saveFilteredHistoryToCsv() {
-        String uuidForFile = selectedUuidFilter;
-
-        // UUID 필터가 없으면 서비스별 파일 분리가 애매하니까 저장 막음
-        if (uuidForFile == null || uuidForFile.trim().isEmpty()) {
-            Log.d("BLE_CSV", "UUID 필터를 먼저 선택해야 저장 가능");
-            return;
-        }
-
-        List<BleDeviceData> unsavedFilteredHistory = new ArrayList<>();
-
-        for (BleDeviceData data : scanHistoryList) {
-            if (matchesFilter(data) && !data.savedToCsv) {
-                unsavedFilteredHistory.add(data);
-            }
-        }
-
-        if (unsavedFilteredHistory.isEmpty()) {
-            Log.d("BLE_CSV", "새로 저장할 누적 필터 데이터가 없음");
-            return;
-        }
-
-        saveListToCsv(unsavedFilteredHistory, uuidForFile);
-    }
-
-    private void saveListToCsv(List<BleDeviceData> dataList, String uuidForFile) {
-        if (callback == null) return;
-        String serviceName = getServiceNameFromUuid(uuidForFile);
-        String safeServiceName = sanitizeFileName(serviceName);
-
-        File dir = callback.getBleActivity().getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
-        if (dir == null) {
-            Log.e("BLE_CSV", "저장 폴더를 가져올 수 없음");
-            return;
-        }
-
-        if (!dir.exists()) {
-            dir.mkdirs();
-        }
-
-        File csvFile = new File(dir, safeServiceName + ".csv");
-        boolean fileExists = csvFile.exists();
-
-        try (FileWriter writer = new FileWriter(csvFile, true)) {
-            if (!fileExists) {
-                writer.append("received_at,device_name,device_address,service_uuid,service_name,rssi,temp,humidity,aqi,tvoc,eco2,payload_timestamp,time_diff_sec,isTimeValid,raw_hex\n");
-            }
-
-            for (BleDeviceData data : dataList) {
-                // 혹시 다른 UUID가 섞여 있으면 저장하지 않음
-                if (data.serviceUuid == null || !data.serviceUuid.equalsIgnoreCase(uuidForFile)) {
-                    continue;
-                }
-
-                String receivedAt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                        .format(new Date(data.receivedAt));
-
-                String row = String.format(Locale.getDefault(),
-                        "%s,%s,%s,%s,%s,%d,%.2f,%.2f,%d,%d,%d,%d,%d,%s,%s\n",
-                        escapeCsv(receivedAt),
-                        escapeCsv(data.deviceName),
-                        escapeCsv(data.deviceAddress),
-                        escapeCsv(data.serviceUuid),
-                        escapeCsv(getServiceNameFromUuid(data.serviceUuid)),
-                        data.rssi,
-                        data.temp,
-                        data.humidity,
-                        data.aqi,
-                        data.tvoc,
-                        data.eco2,
-                        data.timestampValue,
-                        data.timeDiffSec,
-                        String.valueOf(data.isTimeValid),
-                        escapeCsv(data.rawHex)
-                );
-
-                writer.append(row);
-
-                // 저장 성공한 항목은 다시 저장되지 않도록 표시
-                data.savedToCsv = true;
-            }
-
-            writer.flush();
-            Log.d("BLE_CSV", "CSV 저장 완료: " + csvFile.getAbsolutePath());
-
-        } catch (IOException e) {
-            Log.e("BLE_CSV", "CSV 저장 실패", e);
-        }
-    }
-    public void saveSignalQualityHistoryToCsv() {
-        if (callback == null) return;
-        List<BleDeviceData> unsavedSignalList = new ArrayList<>();
-
-        for (BleDeviceData data : scanHistoryList) {
-            if (!data.savedToSignalCsv) {
-                unsavedSignalList.add(data);
-            }
-        }
-
-        if (unsavedSignalList.isEmpty()) {
-            Log.d("BLE_SIGNAL_CSV", "새로 저장할 신호 품질 데이터가 없음");
-            return;
-        }
-
-        File dir = callback.getBleActivity().getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
-        if (dir == null) {
-            Log.e("BLE_SIGNAL_CSV", "저장 폴더를 가져올 수 없음");
-            return;
-        }
-
-        if (!dir.exists()) {
-            dir.mkdirs();
-        }
-
-        File csvFile = new File(dir, "signal_quality.csv");
-        boolean fileExists = csvFile.exists();
-
-        try (FileWriter writer = new FileWriter(csvFile, true)) {
-            if (!fileExists) {
-                writer.append("received_at,tx_power,rssi,path_loss\n");
-            }
-
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
-
-            for (BleDeviceData data : unsavedSignalList) {
-                String receivedAt = sdf.format(new Date(data.receivedAt));
-
-                String txPowerStr = data.txPower != null ? String.valueOf(data.txPower) : "";
-                String pathLossStr = data.pathLoss != null ? String.valueOf(data.pathLoss) : "";
-
-                String row = String.format(Locale.getDefault(),
-                        "%s,%s,%d,%s\n",
-                        escapeCsv(receivedAt),
-                        txPowerStr,
-                        data.rssi,
-                        pathLossStr
-                );
-
-                writer.append(row);
-                data.savedToSignalCsv = true;
-            }
-
-            writer.flush();
-            Log.d("BLE_SIGNAL_CSV", "신호 품질 CSV 저장 완료: " + csvFile.getAbsolutePath());
-
-        } catch (IOException e) {
-            Log.e("BLE_SIGNAL_CSV", "신호 품질 CSV 저장 실패", e);
-        }
+    private static class LegacyAdvertisement {
+        String name;
+        Integer txPower;
+        final List<ParcelUuid> serviceUuids = new ArrayList<>();
+        final Map<ParcelUuid, byte[]> serviceDataMap = new HashMap<>();
     }
 }
-

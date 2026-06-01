@@ -7,8 +7,6 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.os.Handler;
-import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -24,6 +22,7 @@ import com.kakao.vectormap.label.Label;
 import com.kakao.vectormap.label.LabelOptions;
 import com.kakao.vectormap.label.LabelStyle;
 import com.kakao.vectormap.label.LabelStyles;
+import com.example.oss_project.api.SubmissionResponse;
 
 import java.util.Random;
 
@@ -31,12 +30,14 @@ public class SensorMarkerManager {
 
     private final Context context;
     private final KakaoMap kakaoMap;
-    private Integer currentSpawnedId = null;
-    private int luckySensorIndex; // 당첨 센서 인덱스 (0~4)
 
     public interface SensorCollectListener {
-        void onStartScan();
-        void onStopScanAndUpload(int sensorIndex, Integer characterId);
+        void onSubmitSensor(int sensorIndex, SubmissionCallback callback);
+    }
+
+    public interface SubmissionCallback {
+        void onSuccess(SubmissionResponse response);
+        void onError(String message);
     }
 
     private SensorCollectListener collectListener;
@@ -48,8 +49,6 @@ public class SensorMarkerManager {
     public SensorMarkerManager(Context context, KakaoMap kakaoMap) {
         this.context = context;
         this.kakaoMap = kakaoMap;
-        this.luckySensorIndex = new java.util.Random().nextInt(5);
-        android.util.Log.d("CharacterSpawn", "이번 수집 사이클 당첨 센서: " + (luckySensorIndex + 1) + "번");
     }
 
     private final java.util.Map<String, BleDeviceData> sensorDataMap = new java.util.HashMap<>();
@@ -168,52 +167,58 @@ public class SensorMarkerManager {
             if (currentText.equals("획득")) {
                 btnCollect.setVisibility(View.GONE);
                 progressCollect.setVisibility(View.VISIBLE);
+                btnCollect.setEnabled(false);
 
                 if (collectListener != null) {
-                    collectListener.onStartScan();
-                }
+                    collectListener.onSubmitSensor(index, new SubmissionCallback() {
+                        @Override
+                        public void onSuccess(SubmissionResponse response) {
+                            progressCollect.setVisibility(View.GONE);
+                            btnCollect.setVisibility(View.VISIBLE);
+                            btnCollect.setEnabled(true);
+                            btnCollect.setText("수집 완료!");
+                            btnCollect.setBackgroundTintList(ColorStateList.valueOf(
+                                    Color.parseColor("#4CAF50")));
 
-                // 4초간 로딩 연출
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    progressCollect.setVisibility(View.GONE);
-                    btnCollect.setVisibility(View.VISIBLE);
-                    btnCollect.setText("수집 완료!");
-                    btnCollect.setBackgroundTintList(ColorStateList.valueOf(
-                            Color.parseColor("#4CAF50")));
-
-                    // ★ 캐릭터 스폰 로직 (5개 중 1개 당첨 방식)
-                    if (index == luckySensorIndex) {
-                        currentSpawnedId = CharacterManager.generateRandomSpawn();
-                        // 혹시 generateRandomSpawn에서 20% 확률 때문에 null이 나오면 안되므로 
-                        // 무조건 나오게 하거나 확률을 높여야 합니다. 
-                        // 여기서는 '당첨 센서'이므로 무조건 캐릭터가 나오도록 보정합니다.
-                        if (currentSpawnedId == null) {
-                            // 다시 굴려서 무조건 하나 선택 (Common 76%, Silver 18%, Gold 6%)
-                            double roll = new Random().nextDouble() * 100;
-                            int sub = new Random().nextInt(6);
-                            if (roll < 76) currentSpawnedId = sub + 1;
-                            else if (roll < 94) currentSpawnedId = sub + 7;
-                            else currentSpawnedId = sub + 13;
+                            if (response != null
+                                    && Boolean.TRUE.equals(response.characterCollected)
+                                    && response.characterReward != null
+                                    && response.characterReward.characterId != null) {
+                                int characterId = response.characterReward.characterId.intValue();
+                                int resId = CharacterManager.getCharacterDrawableId(characterId);
+                                imgSensor.setImageBitmap(getScaledBitmapWithPadding(resId, 500, 100));
+                                playCelebrateAnimation(dialog, imgSensor);
+                                Toast.makeText(context,
+                                        "새로운 캐릭터 발견: " + response.characterReward.characterName,
+                                        Toast.LENGTH_SHORT).show();
+                            } else {
+                                Toast.makeText(context, "경험치를 획득했습니다!", Toast.LENGTH_SHORT).show();
+                            }
                         }
 
-                        int resId = CharacterManager.getCharacterDrawableId(currentSpawnedId);
-                        imgSensor.setImageBitmap(getScaledBitmapWithPadding(resId, 500, 100));
-                        playCelebrateAnimation(dialog, imgSensor);
-                        Toast.makeText(context, "새로운 캐릭터 발견!", Toast.LENGTH_SHORT).show();
-                        
-                        // 수집 성공 후 다음 사이클을 위해 당첨 위치 변경
-                        luckySensorIndex = new Random().nextInt(5);
-                    } else {
-                        currentSpawnedId = null;
-                        Toast.makeText(context, "경험치를 획득했습니다!", Toast.LENGTH_SHORT).show();
-                    }
-                }, 4000);
+                        @Override
+                        public void onError(String message) {
+                            progressCollect.setVisibility(View.GONE);
+                            btnCollect.setVisibility(View.VISIBLE);
+                            btnCollect.setEnabled(true);
+                            btnCollect.setText("다시 시도");
+                            btnCollect.setBackgroundTintList(ColorStateList.valueOf(
+                                    Color.parseColor("#E91E8C")));
+                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                } else {
+                    progressCollect.setVisibility(View.GONE);
+                    btnCollect.setVisibility(View.VISIBLE);
+                    btnCollect.setEnabled(true);
+                    Toast.makeText(context, "전송 준비가 되지 않았습니다.", Toast.LENGTH_SHORT).show();
+                }
 
             } else if (currentText.equals("수집 완료!")) {
-                if (collectListener != null) {
-                    collectListener.onStopScanAndUpload(index, currentSpawnedId);
-                }
                 dialog.dismiss();
+            } else if (currentText.equals("다시 시도")) {
+                btnCollect.setText("획득");
+                btnCollect.performClick();
             }
         });
 
