@@ -1,15 +1,23 @@
 package com.example.oss_project;
 
 import android.os.Bundle;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
+import com.example.oss_project.api.ApiService;
+import com.example.oss_project.api.ApiResult;
+import com.example.oss_project.api.Response;
+import com.example.oss_project.api.RetrofitClient;
+import com.example.oss_project.api.comm_data;
+import com.example.oss_project.api.postdata;
 import com.kakao.vectormap.KakaoMap;
 import com.kakao.vectormap.KakaoMapReadyCallback;
 import com.kakao.vectormap.LatLng;
@@ -18,6 +26,9 @@ import com.kakao.vectormap.MapView;
 import com.kakao.vectormap.camera.CameraUpdateFactory;
 
 import java.util.List;
+
+import retrofit2.Call;
+import retrofit2.Callback;
 
 public class HomeFragment extends Fragment implements ble.BleCallback {
 
@@ -35,16 +46,13 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_home, container, false);
 
-        // ble 초기화
         bleManager = new ble();
         bleManager.bleInitialize(this);
 
-        // 지도 뷰 설정
         mapView = view.findViewById(R.id.map_view);
         mapView.start(new MapLifeCycleCallback() {
             @Override
             public void onMapDestroy() {}
-
             @Override
             public void onMapError(Exception error) {
                 Log.e("KakaoMap", "지도 에러: " + error.getMessage());
@@ -53,36 +61,30 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
             @Override
             public void onMapReady(@NonNull KakaoMap map) {
                 kakaoMap = map;
-
-                // 매니저 클래스 초기화
                 myLocationManager = new MyLocationManager(getContext(), kakaoMap);
                 sensorMarkerManager = new SensorMarkerManager(getContext(), kakaoMap);
 
-                // 마커 수집 이벤트 리스너 연결
                 sensorMarkerManager.setSensorCollectListener(new SensorMarkerManager.SensorCollectListener() {
                     @Override
                     public void onStartScan() {
                         if (bleManager != null) {
                             bleManager.startScan();
-                            Log.d("HomeFragment", "BLE 스캔 시작 (수집)");
+                            Log.d("HomeFragment", "BLE 스캔 시작");
                         }
                     }
 
                     @Override
-                    public void onStopScanAndUpload(int sensorIndex) {
+                    public void onStopScanAndUpload(int sensorIndex, Integer characterId) {
                         if (bleManager != null) {
                             bleManager.stopScan();
-                            Log.d("HomeFragment", "BLE 스캔 중지 및 서버 전송 요청");
-                            // TODO: 여기에 실제 서버 전송 로직(uploadDataToServer) 추가 필요
+                            uploadDataToServer(sensorIndex, characterId);
                         }
                     }
                 });
 
-                // 초기 카메라 위치 설정 및 센서 마커 추가
                 kakaoMap.moveCamera(CameraUpdateFactory.newCenterPosition(LatLng.from(currentLat, currentLon), 16));
                 sensorMarkerManager.addSensorMarkers();
 
-                // GPS 시작 (권한 체크는 Activity에서 수행 후 호출)
                 if (getActivity() instanceof MainActivity) {
                     ((MainActivity) getActivity()).checkPermissionsAndStart();
                 }
@@ -90,6 +92,39 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
         });
 
         return view;
+    }
+
+    private void uploadDataToServer(int sensorIndex, Integer characterId) {
+        if (sensorMarkerManager == null || getContext() == null) return;
+
+        String macAddress = SensorMarkerManager.SENSOR_MAC_ADDRESSES[sensorIndex];
+        BleDeviceData latestData = sensorMarkerManager.getSensorData(macAddress);
+
+        if (latestData != null) {
+            String androidId = Settings.Secure.getString(getContext().getContentResolver(), Settings.Secure.ANDROID_ID);
+            postdata pd = RetrofitClient.makePostData(latestData, currentLat, currentLon, androidId, characterId);
+
+            comm_data service = RetrofitClient.getClient().create(comm_data.class);
+            service.post_json(pd).enqueue(new Callback<Response>() {
+                @Override
+                public void onResponse(Call<Response> call, retrofit2.Response<Response> response) {
+                    if (response.isSuccessful() && response.body() != null) {
+                        Log.d("ServerUpload", "데이터 전송 성공: " + response.body().message);
+                        if (getActivity() != null) {
+                            getActivity().runOnUiThread(() -> Toast.makeText(getContext(), "수집 및 전송 완료!", Toast.LENGTH_SHORT).show());
+                        }
+                    } else {
+                        Log.e("ServerUpload", "데이터 전송 실패 코드: " + response.code());
+                    }
+                }
+                @Override
+                public void onFailure(Call<Response> call, Throwable t) {
+                    Log.e("ServerUpload", "통신 에러: " + t.getMessage());
+                }
+            });
+        } else {
+            Toast.makeText(getContext(), "수집된 센서 데이터가 없습니다. (MAC: " + macAddress + ")", Toast.LENGTH_SHORT).show();
+        }
     }
 
     public void startGpsAndScan() {
@@ -103,29 +138,21 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
                 }
             });
         }
-        if (bleManager != null) {
-            bleManager.startScan();
-        }
+        if (bleManager != null) bleManager.startScan();
     }
 
     @Override
     public void onFilteredBleDataUpdated(List<BleDeviceData> dataList, List<String> discoveredUuids) {
-        if (sensorMarkerManager != null) {
-            sensorMarkerManager.updateSensorData(dataList);
-        }
+        if (sensorMarkerManager != null) sensorMarkerManager.updateSensorData(dataList);
     }
 
     @Override
     public void runOnUiThread(Runnable action) {
-        if (getActivity() != null) {
-            getActivity().runOnUiThread(action);
-        }
+        if (getActivity() != null) getActivity().runOnUiThread(action);
     }
 
     @Override
-    public android.app.Activity getBleActivity() {
-        return getActivity();
-    }
+    public android.app.Activity getBleActivity() { return getActivity(); }
 
     @Override
     public void onResume() {
