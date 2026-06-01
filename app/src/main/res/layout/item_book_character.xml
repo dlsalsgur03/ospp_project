@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="0dp"
+    app:strokeWidth="1dp"
+    app:strokeColor="#EEEEEE"
+    app:cardBackgroundColor="#FDFDFD">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="12dp">
+
+        <ImageView
+            android:id="@+id/img_character"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:scaleType="centerInside"
+            app:layout_constraintDimensionRatio="1:1"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:src="@drawable/sensor_1" />
+
+        <!-- 미획득 시 덮개 -->
+        <View
+            android:id="@+id/view_locked_overlay"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:background="#88FFFFFF"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="@id/img_character"
+            app:layout_constraintBottom_toBottomOf="@id/img_character"
+            app:layout_constraintStart_toStartOf="@id/img_character"
+            app:layout_constraintEnd_toEndOf="@id/img_character" />
+
+        <!-- 자물쇠 아이콘 -->
+        <ImageView
+            android:id="@+id/img_lock"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@android:drawable/ic_secure"
+            android:alpha="0.4"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="@id/img_character"
+            app:layout_constraintBottom_toBottomOf="@id/img_character"
+            app:layout_constraintStart_toStartOf="@id/img_character"
+            app:layout_constraintEnd_toEndOf="@id/img_character" />
+
+        <TextView
+            android:id="@+id/tv_character_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="'???'"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            app:layout_constraintTop_toBottomOf="@id/img_character"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</com.google.android.material.card.MaterialCardView>
