@@ -20,4 +20,13 @@ public interface ApiService {
 
     @GET("api/users/me/characters/dex")
     Call<ApiResult<DexData>> getCharacterDex(@Header("Authorization") String token);
+
+    @GET("api/characters/spawns")
+    Call<ApiResult<CharacterSpawnListResponse>> getCurrentSpawns();
+
+    @POST("api/submissions")
+    Call<ApiResult<Response>> submitCollection(
+            @Header("Authorization") String token,
+            @Body SubmissionRequest request
+    );
 }

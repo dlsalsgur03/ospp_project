@@ -2,10 +2,27 @@ package com.example.oss_project;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.animation.OvershootInterpolator;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.ProgressBar;
+import android.widget.Toast;
 
+import com.example.oss_project.api.ApiResult;
+import com.example.oss_project.api.ApiService;
+import com.example.oss_project.api.CharacterDexItem;
+import com.example.oss_project.api.CharacterSpawnItem;
+import com.example.oss_project.api.CharacterSpawnListResponse;
+import com.example.oss_project.api.RetrofitClient;
 import com.kakao.vectormap.KakaoMap;
 import com.kakao.vectormap.LatLng;
 import com.kakao.vectormap.label.Label;
@@ -13,47 +30,23 @@ import com.kakao.vectormap.label.LabelOptions;
 import com.kakao.vectormap.label.LabelStyle;
 import com.kakao.vectormap.label.LabelStyles;
 
+import java.util.List;
+import java.util.Random;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
 public class SensorMarkerManager {
 
     private final Context context;
     private final KakaoMap kakaoMap;
-
-
-    private final java.util.Map<String, BleDeviceData> sensorDataMap = new java.util.HashMap<>();
-    //ㄴ>나중에 서버 전송 시 사용할거임
-
-    // BLE 데이터 업데이트 메서드
-    public void updateSensorData(java.util.List<BleDeviceData> dataList) {
-        for (BleDeviceData data : dataList) {
-            sensorDataMap.put(data.deviceAddress.toUpperCase(), data);
-        }
-    }
-    private static final double[][] SENSOR_POSITIONS = {
-            {36.6287545, 127.4579699},
-            {36.62933,   127.4575},
-            {36.62976,   127.4563},
-            {36.63083,   127.4549},
-            {36.63089,   127.4543}
-    };
-
-    public static final String[] SENSOR_NAMES = {
-            "센서 1 - 도서관 뒷편",
-            "센서 2 - 사회과학대 입구",
-            "센서 3 - 이마트24 건너편",
-            "센서 4 - 테니스장 앞",
-            "센서 5 - 테니스장 건너편"
-    };
-    public static final String[] SENSOR_MAC_ADDRESSES = {
-            "D8:3A:DD:79:8E:BF",  // 센서 1 - 도서관 뒷편
-            "B8:27:EB:D3:40:06",  // 센서 2 - 사회과학대 입구
-            "88:A2:9E:9B:6A",     // 센서 3 - 이마트24 건너편
-            "D8:3A:DD:79:8F:80",  // 센서 4 - 테니스장 앞
-            "D8:3A:DD:C1:88:BD"   // 센서 5 - 테니스장 건너편
-    };
+    private CharacterDexItem spawnedCharacter = null;
+    private Long currentSensorId = null;
 
     public interface SensorCollectListener {
         void onStartScan();
-        void onStopScanAndUpload(int sensorIndex);
+        void onStopScanAndUpload(int sensorIndex, Long sensorId);
     }
 
     private SensorCollectListener collectListener;
@@ -62,6 +55,27 @@ public class SensorMarkerManager {
         this.collectListener = listener;
     }
 
+    private final java.util.Map<String, BleDeviceData> sensorDataMap = new java.util.HashMap<>();
+
+    public void updateSensorData(java.util.List<BleDeviceData> dataList) {
+        for (BleDeviceData data : dataList) {
+            sensorDataMap.put(data.deviceAddress.toUpperCase(), data);
+        }
+    }
+
+    public BleDeviceData getSensorData(String macAddress) {
+        if (macAddress == null) return null;
+        return sensorDataMap.get(macAddress.toUpperCase());
+    }
+
+    private static final double[][] SENSOR_POSITIONS = {
+            {36.6287545, 127.4579699}, {36.62933, 127.4575}, {36.62976, 127.4563}, {36.63083, 127.4549}, {36.63089, 127.4543}
+    };
+
+    public static final String[] SENSOR_MAC_ADDRESSES = {
+            "D8:3A:DD:79:8E:BF", "B8:27:EB:D3:40:06", "88:A2:9E:9B:6A", "D8:3A:DD:79:8F:80", "D8:3A:DD:C1:88:BD"
+    };
+
     public SensorMarkerManager(Context context, KakaoMap kakaoMap) {
         this.context = context;
         this.kakaoMap = kakaoMap;
@@ -69,25 +83,14 @@ public class SensorMarkerManager {
 
     public void addSensorMarkers() {
         Bitmap bitmap = createSensorBitmap();
-        LabelStyles styles = kakaoMap.getLabelManager()
-                .addLabelStyles(LabelStyles.from(LabelStyle.from(bitmap)));
-
+        LabelStyles styles = kakaoMap.getLabelManager().addLabelStyles(LabelStyles.from(LabelStyle.from(bitmap)));
         for (int i = 0; i < SENSOR_POSITIONS.length; i++) {
             LatLng pos = LatLng.from(SENSOR_POSITIONS[i][0], SENSOR_POSITIONS[i][1]);
-            kakaoMap.getLabelManager().getLayer().addLabel(
-                    LabelOptions.from(pos)
-                            .setStyles(styles)
-                            .setTag(i)
-            );
+            kakaoMap.getLabelManager().getLayer().addLabel(LabelOptions.from(pos).setStyles(styles).setTag(i));
         }
-
-        // 마커 클릭 이벤트
         kakaoMap.setOnLabelClickListener((map, layer, label) -> {
             Object tag = label.getTag();
-            if (tag instanceof Integer) {
-                int index = (Integer) tag;
-                showSensorDialog(index);
-            }
+            if (tag instanceof Integer) showSensorDialog((Integer) tag);
         });
     }
 
@@ -95,128 +98,124 @@ public class SensorMarkerManager {
         int size = 36;
         Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
-
         Paint paint = new Paint();
         paint.setAntiAlias(true);
         paint.setColor(Color.parseColor("#E53935"));
         canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint);
-
         paint.setStyle(Paint.Style.STROKE);
         paint.setColor(Color.WHITE);
         paint.setStrokeWidth(3f);
         canvas.drawCircle(size / 2f, size / 2f, size / 2f - 2, paint);
-
         return bitmap;
     }
 
     private void showSensorDialog(int index) {
-        int[] sensorImages = {
-                R.drawable.sensor_1,
-                R.drawable.sensor_2,
-                R.drawable.sensor_3,
-                R.drawable.sensor_4,
-                R.drawable.sensor_5
-        };
-
+        int[] sensorImages = {R.drawable.sensor_1, R.drawable.sensor_2, R.drawable.sensor_3, R.drawable.sensor_4, R.drawable.sensor_5};
         android.app.Dialog dialog = new android.app.Dialog(context);
         dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
         dialog.setContentView(R.layout.dialog_sensor);
-
-        // 둥근 배경 및 크기 설정
         if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawable(
-                    new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
-            dialog.getWindow().setLayout(
-                    (int)(context.getResources().getDisplayMetrics().widthPixels * 0.88f),
-                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-            );
+            dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+            dialog.getWindow().setLayout((int)(context.getResources().getDisplayMetrics().widthPixels * 0.88f), ViewGroup.LayoutParams.WRAP_CONTENT);
         }
 
-        // 센서 사진
-        de.hdodenhof.circleimageview.CircleImageView imgSensor =
-                dialog.findViewById(R.id.img_sensor);
+        de.hdodenhof.circleimageview.CircleImageView imgSensor = dialog.findViewById(R.id.img_sensor);
         imgSensor.setImageResource(sensorImages[index]);
-
-        // 닫기 버튼
         dialog.findViewById(R.id.btn_close).setOnClickListener(v -> dialog.dismiss());
 
-        // 획득 버튼 로직 수정
-        android.widget.Button btnCollect = dialog.findViewById(R.id.btn_collect);
-        android.widget.ProgressBar progressCollect = dialog.findViewById(R.id.progress_collect);
-
-        // --- 시간 제한 및 근접 체크 로직 (테스트를 위해 일시 비활성화) ---
-        /*
-        android.content.SharedPreferences prefs = context.getSharedPreferences("SensorPrefs", android.content.Context.MODE_PRIVATE);
-        long lastCollectTime = prefs.getLong("last_collect_" + index, 0);
-        long currentTime = System.currentTimeMillis();
-
-        String macAddress = SENSOR_MAC_ADDRESSES[index];
-        boolean isSensorNearby = sensorDataMap.containsKey(macAddress.toUpperCase());
-
-        if (isSameHour(lastCollectTime, currentTime)) {
-            // 이번 정각 내에 이미 수집함
-            btnCollect.setEnabled(false);
-            btnCollect.setText("다음 정각에 수집 가능");
-            btnCollect.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
-                    android.graphics.Color.parseColor("#9E9E9E"))); // 회색으로 비활성화
-        } else if (!isSensorNearby) {
-            // 신호가 잡히지 않는 경우
-            btnCollect.setEnabled(false);
-            btnCollect.setText("센서 주변이 아닙니다!");
-            btnCollect.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
-                    android.graphics.Color.parseColor("#9E9E9E"))); // 회색으로 비활성화
-        }
-        */
+        Button btnCollect = dialog.findViewById(R.id.btn_collect);
+        ProgressBar progressCollect = dialog.findViewById(R.id.progress_collect);
 
         btnCollect.setOnClickListener(v -> {
-            String currentText = btnCollect.getText().toString();
+            if (btnCollect.getText().toString().equals("획득")) {
+                btnCollect.setVisibility(View.GONE);
+                progressCollect.setVisibility(View.VISIBLE);
+                if (collectListener != null) collectListener.onStartScan();
 
-            if (currentText.equals("획득")) {
-                // 1단계: BLE 스캔 시작 및 로딩 표시
-                btnCollect.setVisibility(android.view.View.GONE);
-                progressCollect.setVisibility(android.view.View.VISIBLE);
+                // 서버에서 출몰 정보 확인
+                spawnedCharacter = null;
+                currentSensorId = (long)(index + 1); // 기본 ID 매핑
+                checkSpawnedCharacter(index);
 
-                if (collectListener != null) {
-                    collectListener.onStartScan();
-                }
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    progressCollect.setVisibility(View.GONE);
+                    btnCollect.setVisibility(View.VISIBLE);
+                    btnCollect.setText("수집 완료!");
+                    btnCollect.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#4CAF50")));
 
-                // 4초간 로딩 (수집 중인 것처럼 연출)
-                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                    progressCollect.setVisibility(android.view.View.GONE);
-                    btnCollect.setVisibility(android.view.View.VISIBLE);
-                    btnCollect.setText("수집 완료");
-                    btnCollect.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
-                            android.graphics.Color.parseColor("#4CAF50"))); // 초록색으로 변경
+                    if (spawnedCharacter != null) {
+                        int resId = CharacterManager.getCharacterDrawableId(spawnedCharacter.getCharacterId());
+                        imgSensor.setImageBitmap(getScaledBitmapWithPadding(resId, 500, 100));
+                        playCelebrateAnimation(dialog, imgSensor);
+                        Toast.makeText(context, spawnedCharacter.getCharacterName() + " 발견!", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(context, "경험치를 획득했습니다!", Toast.LENGTH_SHORT).show();
+                    }
                 }, 4000);
-
-            } else if (currentText.equals("수집 완료")) {
-                // 3단계: 수집 완료 클릭 시 (스캔 중지 및 서버 전송)
-                
-                // 현재 시간을 마지막 수집 시간으로 저장 (테스트를 위해 일시 비활성화)
-                // android.content.SharedPreferences prefs = context.getSharedPreferences("SensorPrefs", android.content.Context.MODE_PRIVATE);
-                // prefs.edit().putLong("last_collect_" + index, System.currentTimeMillis()).apply();
-
-                if (collectListener != null) {
-                    collectListener.onStopScanAndUpload(index);
-                }
+            } else if (btnCollect.getText().toString().equals("수집 완료!")) {
+                if (collectListener != null) collectListener.onStopScanAndUpload(index, currentSensorId);
                 dialog.dismiss();
             }
         });
-
         dialog.show();
     }
 
-    // 두 시간이 같은 연도/날짜/시간(Hour)인지 비교하는 헬퍼 함수
-    private boolean isSameHour(long time1, long time2) {
-        if (time1 == 0) return false;
+    private void checkSpawnedCharacter(int index) {
+        String targetName = "SENSOR-00" + (index + 1);
+        ApiService service = RetrofitClient.getClient().create(ApiService.class);
+        service.getCurrentSpawns().enqueue(new Callback<ApiResult<CharacterSpawnListResponse>>() {
+            @Override
+            public void onResponse(Call<ApiResult<CharacterSpawnListResponse>> call, retrofit2.Response<ApiResult<CharacterSpawnListResponse>> response) {
+                if (response.isSuccessful() && response.body() != null && response.body().data != null) {
+                    List<CharacterSpawnItem> spawns = response.body().data.getSpawns();
+                    if (spawns != null) {
+                        for (CharacterSpawnItem spawn : spawns) {
+                            if (targetName.equals(spawn.getSensorName())) {
+                                spawnedCharacter = spawn.getCharacter();
+                                currentSensorId = spawn.getSensorId();
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            @Override
+            public void onFailure(Call<ApiResult<CharacterSpawnListResponse>> call, Throwable t) {
+                Log.e("SpawnCheck", "서버 통신 실패: " + t.getMessage());
+            }
+        });
+    }
 
-        java.util.Calendar cal1 = java.util.Calendar.getInstance();
-        cal1.setTimeInMillis(time1);
-        java.util.Calendar cal2 = java.util.Calendar.getInstance();
-        cal2.setTimeInMillis(time2);
+    private void playCelebrateAnimation(android.app.Dialog dialog, View targetView) {
+        FrameLayout container = dialog.findViewById(R.id.layout_character_container);
+        if (container == null) return;
+        targetView.setScaleX(0f); targetView.setScaleY(0f); targetView.setRotation(-180f);
+        targetView.animate().scaleX(1f).scaleY(1f).rotation(0f).setDuration(600).setInterpolator(new OvershootInterpolator()).start();
+        int[] colors = {Color.YELLOW, Color.RED, Color.CYAN, Color.MAGENTA, Color.GREEN, Color.parseColor("#B91858")};
+        Random random = new Random();
+        for (int i = 0; i < 45; i++) {
+            final View particle = new View(context);
+            int size = 12 + random.nextInt(15);
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size);
+            lp.gravity = android.view.Gravity.CENTER;
+            particle.setLayoutParams(lp);
+            android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable();
+            shape.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            shape.setColor(colors[random.nextInt(colors.length)]);
+            particle.setBackground(shape);
+            container.addView(particle, 0);
+            float angle = (float) (random.nextFloat() * 2 * Math.PI);
+            float distance = 350f + random.nextInt(350);
+            particle.animate().translationX((float) (Math.cos(angle) * distance)).translationY((float) (Math.sin(angle) * distance)).alpha(0f).scaleX(0f).scaleY(0f).setDuration(1200 + random.nextInt(600)).setStartDelay(random.nextInt(200)).withEndAction(() -> container.removeView(particle)).start();
+        }
+    }
 
-        return cal1.get(java.util.Calendar.YEAR) == cal2.get(java.util.Calendar.YEAR) &&
-                cal1.get(java.util.Calendar.DAY_OF_YEAR) == cal2.get(java.util.Calendar.DAY_OF_YEAR) &&
-                cal1.get(java.util.Calendar.HOUR_OF_DAY) == cal2.get(java.util.Calendar.HOUR_OF_DAY);
+    private Bitmap getScaledBitmapWithPadding(int resId, int size, int padding) {
+        Bitmap original = BitmapFactory.decodeResource(context.getResources(), resId);
+        Bitmap scaled = Bitmap.createScaledBitmap(original, size - padding * 2, size - padding * 2, true);
+        Bitmap output = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(output);
+        canvas.drawBitmap(scaled, padding, padding, null);
+        return output;
     }
 }
