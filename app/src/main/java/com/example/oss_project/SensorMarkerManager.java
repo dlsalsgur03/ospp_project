@@ -37,6 +37,7 @@ public class SensorMarkerManager {
     public interface SensorCollectListener {
         void onStartScan();
         void onStopScanAndUpload(int sensorIndex, Integer characterId);
+        void onCancelScan();
     }
 
     private SensorCollectListener collectListener;
@@ -66,6 +67,11 @@ public class SensorMarkerManager {
         return sensorDataMap.get(macAddress.toUpperCase());
     }
 
+    // 테스트를 위해 모든 데이터 맵 반환 (다시 추가)
+    public java.util.Map<String, BleDeviceData> getSensorDataMap() {
+        return sensorDataMap;
+    }
+
     private static final double[][] SENSOR_POSITIONS = {
             {36.6287545, 127.4579699},
             {36.62933,   127.4575},
@@ -84,7 +90,7 @@ public class SensorMarkerManager {
     public static final String[] SENSOR_MAC_ADDRESSES = {
             "D8:3A:DD:79:8E:BF",
             "B8:27:EB:D3:40:06",
-            "88:A2:9E:9B:6A",
+            "88:A2:9E:9B:5E:6A",
             "D8:3A:DD:79:8F:80",
             "D8:3A:DD:C1:88:BD"
     };
@@ -157,8 +163,14 @@ public class SensorMarkerManager {
                 dialog.findViewById(R.id.img_sensor);
         imgSensor.setImageResource(sensorImages[index]);
 
-        dialog.findViewById(R.id.btn_close).setOnClickListener(v -> dialog.dismiss());
+        dialog.findViewById(R.id.btn_close).setOnClickListener(v -> {
+            if (collectListener != null) {
+                collectListener.onCancelScan();
+            }
+            dialog.dismiss();
+        });
 
+        // 획득 버튼 로직
         Button btnCollect = dialog.findViewById(R.id.btn_collect);
         ProgressBar progressCollect = dialog.findViewById(R.id.progress_collect);
 
@@ -184,11 +196,7 @@ public class SensorMarkerManager {
                     // ★ 캐릭터 스폰 로직 (5개 중 1개 당첨 방식)
                     if (index == luckySensorIndex) {
                         currentSpawnedId = CharacterManager.generateRandomSpawn();
-                        // 혹시 generateRandomSpawn에서 20% 확률 때문에 null이 나오면 안되므로 
-                        // 무조건 나오게 하거나 확률을 높여야 합니다. 
-                        // 여기서는 '당첨 센서'이므로 무조건 캐릭터가 나오도록 보정합니다.
                         if (currentSpawnedId == null) {
-                            // 다시 굴려서 무조건 하나 선택 (Common 76%, Silver 18%, Gold 6%)
                             double roll = new Random().nextDouble() * 100;
                             int sub = new Random().nextInt(6);
                             if (roll < 76) currentSpawnedId = sub + 1;
@@ -201,7 +209,6 @@ public class SensorMarkerManager {
                         playCelebrateAnimation(dialog, imgSensor);
                         Toast.makeText(context, "새로운 캐릭터 발견!", Toast.LENGTH_SHORT).show();
                         
-                        // 수집 성공 후 다음 사이클을 위해 당첨 위치 변경
                         luckySensorIndex = new Random().nextInt(5);
                     } else {
                         currentSpawnedId = null;
@@ -277,16 +284,5 @@ public class SensorMarkerManager {
         Canvas canvas = new Canvas(output);
         canvas.drawBitmap(scaled, padding, padding, null);
         return output;
-    }
-
-    private boolean isSameHour(long time1, long time2) {
-        if (time1 == 0) return false;
-        java.util.Calendar cal1 = java.util.Calendar.getInstance();
-        cal1.setTimeInMillis(time1);
-        java.util.Calendar cal2 = java.util.Calendar.getInstance();
-        cal2.setTimeInMillis(time2);
-        return cal1.get(java.util.Calendar.YEAR) == cal2.get(java.util.Calendar.YEAR) &&
-                cal1.get(java.util.Calendar.DAY_OF_YEAR) == cal2.get(java.util.Calendar.DAY_OF_YEAR) &&
-                cal1.get(java.util.Calendar.HOUR_OF_DAY) == cal2.get(java.util.Calendar.HOUR_OF_DAY);
     }
 }

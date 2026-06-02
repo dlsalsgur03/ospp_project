@@ -80,6 +80,14 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
                             uploadDataToServer(sensorIndex, characterId);
                         }
                     }
+
+                    @Override
+                    public void onCancelScan() {
+                        if (bleManager != null) {
+                            bleManager.stopScan();
+                            Log.d("HomeFragment", "수집 취소 - BLE 스캔 중지");
+                        }
+                    }
                 });
 
                 kakaoMap.moveCamera(CameraUpdateFactory.newCenterPosition(LatLng.from(currentLat, currentLon), 16));
@@ -97,10 +105,19 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
     private void uploadDataToServer(int sensorIndex, Integer characterId) {
         if (sensorMarkerManager == null || getContext() == null) return;
 
+        // [변경] 특정 MAC 주소를 찾지 않고, 현재 잡힌 최신 데이터 아무거나 가져옵니다.
         String macAddress = SensorMarkerManager.SENSOR_MAC_ADDRESSES[sensorIndex];
-        BleDeviceData latestData = sensorMarkerManager.getSensorData(macAddress);
+        BleDeviceData latestData = null;
+        
+        // 센서 데이터 맵에서 가장 마지막에 들어온 데이터를 찾습니다.
+        if (sensorMarkerManager.getSensorDataMap() != null && !sensorMarkerManager.getSensorDataMap().isEmpty()) {
+            for (BleDeviceData data : sensorMarkerManager.getSensorDataMap().values()) {
+                latestData = data; // 마지막 하나를 선택 (테스트용)
+            }
+        }
 
         if (latestData != null) {
+            Log.d("HomeFragment", "테스트 모드: 잡힌 센서 데이터로 전송 시도 (MAC: " + latestData.deviceAddress + ")");
             String androidId = Settings.Secure.getString(getContext().getContentResolver(), Settings.Secure.ANDROID_ID);
             postdata pd = RetrofitClient.makePostData(latestData, currentLat, currentLon, androidId, characterId);
 
@@ -138,7 +155,6 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
                 }
             });
         }
-        if (bleManager != null) bleManager.startScan();
     }
 
     @Override

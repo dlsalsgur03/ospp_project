@@ -58,10 +58,20 @@ public class ble {
     }
 
     public void startScan() {
-        if (bluetoothLeScanner == null) return;
+        Log.d("BLE_STEP", "1. startScan() 호출됨");
+        if (bluetoothLeScanner == null) {
+            Log.e("BLE_STEP", "2. scanner NULL");
+            return;
+        }
 
-        if (callback == null || ActivityCompat.checkSelfPermission(callback.getBleActivity(), Manifest.permission.BLUETOOTH_SCAN)
+        if (callback == null) {
+            Log.e("BLE_STEP", "3. callback NULL");
+            return;
+        }
+
+        if (ActivityCompat.checkSelfPermission(callback.getBleActivity(), Manifest.permission.BLUETOOTH_SCAN)
                 != PackageManager.PERMISSION_GRANTED) {
+            Log.e("BLE_STEP", "3. BLUETOOTH_SCAN 권한 없음");
             return;
         }
 
@@ -162,6 +172,7 @@ public class ble {
     private final ScanCallback scanCallback = new ScanCallback() {
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
+            Log.d("BLE_STEP", "5. onScanResult 진입");
             if (callback == null) return;
             BluetoothDevice device = result.getDevice();
             if (device == null) return;
@@ -178,7 +189,12 @@ public class ble {
             int rssi = result.getRssi();
 
             ScanRecord scanRecord = result.getScanRecord();
-            if (scanRecord == null) return;
+            if (scanRecord == null) {
+                Log.e("BLE_STEP", "6. scanRecord NULL");
+                return;
+            }
+
+            Log.d("BLE_STEP", "6. scanRecord 존재");
 
             Integer txPower = null;
             Integer pathloss = null;
@@ -218,6 +234,18 @@ public class ble {
                 String serviceUuid = uuid.toString();
                 String rawHex = bytesToHex(serviceData);
 
+                // 환경 센서 표준(181a)이 포함된 경우 상세 로우 데이터까지 로그 출력
+                if (serviceUuid.toLowerCase().contains("181a")) {
+                    Log.d("BLE_DETECTOR", "타겟 센서(181a) 발견 -> Address: " + deviceAddress + " | UUID: " + serviceUuid + " | RAW: " + rawHex);
+                } else {
+                    Log.d("BLE_DETECTOR", "일반 신호 발견 -> Address: " + deviceAddress + " | UUID: " + serviceUuid);
+                }
+
+                // 환경 센서 표준(181a) 포함 여부만 확인 (필터링 최소화)
+                if (!serviceUuid.toLowerCase().contains("181a")) {
+                    continue; 
+                }
+
                 float temp = 0.0f;
                 float humidity = 0.0f;
                 int aqi = 0;
@@ -228,26 +256,39 @@ public class ble {
                 boolean isTimeValid = false;
 
 
-                if (serviceData.length >= 13) {
+                if (serviceData.length >= 5) { // 5바이트 이상이면 온습도 파싱 가능
                     short tempRaw = (short) (((serviceData[1] & 0xFF) << 8) | (serviceData[0] & 0xFF));
                     int humidityRaw = ((serviceData[3] & 0xFF) << 8) | (serviceData[2] & 0xFF);
                     aqi = serviceData[4] & 0xFF;
-                    tvoc = ((serviceData[6] & 0xFF) << 8) | (serviceData[5] & 0xFF);
-                    eco2 = ((serviceData[8] & 0xFF) << 8) | (serviceData[7] & 0xFF);
-
-                    payloadTimestamp =
-                            ((long) (serviceData[12] & 0xFF) << 24) |
-                                    ((long) (serviceData[11] & 0xFF) << 16) |
-                                    ((long) (serviceData[10] & 0xFF) << 8) |
-                                    ((long) (serviceData[9] & 0xFF));
-
                     temp = tempRaw / 100.0f;
                     humidity = humidityRaw / 100.0f;
 
-                    long receivedAt = System.currentTimeMillis();
-                    timeDiffSec = (receivedAt/1000L) - payloadTimestamp;
-                    long maxAllowedDiffSec = 60;
-                    isTimeValid = Math.abs(timeDiffSec) <= maxAllowedDiffSec;
+                    // [핵심] 센서 데이터 발견 즉시 상세 정보 로그 출력
+                    Log.i("SENSOR_FOUND", "============================================");
+                    Log.i("SENSOR_FOUND", "가까운 센서 발견!");
+                    Log.i("SENSOR_FOUND", "MAC 주소 : " + deviceAddress);
+                    Log.i("SENSOR_FOUND", "현재 온도 : " + String.format("%.2f", temp) + "°C");
+                    Log.i("SENSOR_FOUND", "현재 습도 : " + String.format("%.2f", humidity) + "%");
+                    Log.i("SENSOR_FOUND", "공기질(AQI): " + aqi);
+                    Log.i("SENSOR_FOUND", "RAW 데이터: " + rawHex);
+                    Log.i("SENSOR_FOUND", "============================================");
+
+                    if (serviceData.length >= 9) {
+                        tvoc = ((serviceData[6] & 0xFF) << 8) | (serviceData[5] & 0xFF);
+                        eco2 = ((serviceData[8] & 0xFF) << 8) | (serviceData[7] & 0xFF);
+                    }
+                    if (serviceData.length >= 13) {
+                        payloadTimestamp =
+                                ((long) (serviceData[12] & 0xFF) << 24) |
+                                        ((long) (serviceData[11] & 0xFF) << 16) |
+                                        ((long) (serviceData[10] & 0xFF) << 8) |
+                                        ((long) (serviceData[9] & 0xFF));
+
+                        long receivedAt = System.currentTimeMillis();
+                        timeDiffSec = (receivedAt/1000L) - payloadTimestamp;
+                        isTimeValid = Math.abs(timeDiffSec) <= 60;
+                    }
+                    Log.i("PARSE_CHECK", "TEMP=" + temp + ", HUM=" + humidity + ", AQI=" + aqi + ", ECO2=" + eco2);
                 }
 
                 BleDeviceData bleData = new BleDeviceData(
