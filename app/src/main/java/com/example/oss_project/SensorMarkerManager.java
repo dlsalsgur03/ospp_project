@@ -23,7 +23,8 @@ import com.kakao.vectormap.label.LabelOptions;
 import com.kakao.vectormap.label.LabelStyle;
 import com.kakao.vectormap.label.LabelStyles;
 import com.example.oss_project.api.SubmissionResponse;
-
+import android.content.SharedPreferences;
+import java.util.Calendar;
 import java.util.Random;
 
 public class SensorMarkerManager {
@@ -175,27 +176,69 @@ public class SensorMarkerManager {
         Button btnCollect = dialog.findViewById(R.id.btn_collect);
         ProgressBar progressCollect = dialog.findViewById(R.id.progress_collect);
 
-        double distance = calculateDistance(
-                currentLat,
-                currentLon,
-                SENSOR_POSITIONS[index][0],
-                SENSOR_POSITIONS[index][1]
+        SharedPreferences prefs =
+                context.getSharedPreferences("collect_pref", Context.MODE_PRIVATE);
+
+        long lastCollectedTime =
+                prefs.getLong("sensor_time_" + index, 0);
+
+        long now = System.currentTimeMillis();
+
+        Calendar nextHour = Calendar.getInstance();
+        nextHour.setTimeInMillis(lastCollectedTime);
+
+        nextHour.set(Calendar.MINUTE, 0);
+        nextHour.set(Calendar.SECOND, 0);
+        nextHour.set(Calendar.MILLISECOND, 0);
+
+        nextHour.add(Calendar.HOUR_OF_DAY, 1);
+
+// 기본 상태
+        btnCollect.setEnabled(true);
+        btnCollect.setText("획득");
+        btnCollect.setBackgroundTintList(
+                ColorStateList.valueOf(Color.parseColor("#E91E8C"))
         );
 
-        Log.d("GPS_CHECK",
-                "사용자-센서 거리 = " + distance + "m");
-        if (distance > 10.0) {
+// 1순위 : 시간 제한
+        if (lastCollectedTime > 0
+                && now < nextHour.getTimeInMillis()) {
+
             btnCollect.setEnabled(false);
-            btnCollect.setText(
-                    String.format(
-                            java.util.Locale.KOREA,
-                            "%.1fm 더 이동",
-                            distance - 10.0
-                    )
-            );
+            btnCollect.setText("다음 정각 이후 가능");
             btnCollect.setBackgroundTintList(
                     ColorStateList.valueOf(Color.GRAY)
             );
+
+        } else {
+
+            // 2순위 : 거리 제한
+            double distance = calculateDistance(
+                    currentLat,
+                    currentLon,
+                    SENSOR_POSITIONS[index][0],
+                    SENSOR_POSITIONS[index][1]
+            );
+
+            Log.d("GPS_CHECK",
+                    "사용자-센서 거리 = " + distance + "m");
+
+            if (distance > 10.0) {
+
+                btnCollect.setEnabled(false);
+
+                btnCollect.setText(
+                        String.format(
+                                java.util.Locale.KOREA,
+                                "%.1fm 더 이동",
+                                distance - 10.0
+                        )
+                );
+
+                btnCollect.setBackgroundTintList(
+                        ColorStateList.valueOf(Color.GRAY)
+                );
+            }
         }
 
         btnCollect.setOnClickListener(v -> {
@@ -216,6 +259,12 @@ public class SensorMarkerManager {
                     collectListener.onSubmitSensor(index, new SubmissionCallback() {
                         @Override
                         public void onSuccess(SubmissionResponse response) {
+                            prefs.edit()
+                                    .putLong(
+                                            "sensor_time_" + index,
+                                            System.currentTimeMillis()
+                                    )
+                                    .apply();
                             progressCollect.setVisibility(View.GONE);
                             btnCollect.setVisibility(View.VISIBLE);
                             btnCollect.setEnabled(true);
