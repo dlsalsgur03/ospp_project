@@ -100,10 +100,33 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
             return;
         }
 
-        SubmissionRequest request = createHardcodedSubmissionRequest(sensorIndex);
-        Log.d("ServerUpload", "하드코딩 submission 전송"
+        // 실제 스캔된 데이터 가져오기
+        String macAddress = SensorMarkerManager.SENSOR_MAC_ADDRESSES[sensorIndex];
+        BleDeviceData realData = sensorMarkerManager.getSensorData(macAddress);
+
+        if (realData == null) {
+            callback.onError("센서 신호가 감지되지 않았습니다. 센서 근처에서 다시 시도해 주세요.");
+            Log.e("ServerUpload", "데이터 없음: MAC=" + macAddress);
+            return;
+        }
+
+        String measuredAt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(new Date());
+        SubmissionRequest request = new SubmissionRequest(
+                sensorIndex + 1L,
+                realData.temp,
+                realData.humidity,
+                realData.eco2,
+                realData.aqi,
+                realData.rssi,
+                currentLat,
+                currentLon,
+                measuredAt
+        );
+
+        Log.d("ServerUpload", "실제 BLE 데이터 submission 전송"
                 + ": sensorIndex=" + sensorIndex
-                + ", sensorId=" + request.sensorId);
+                + ", mac=" + macAddress
+                + ", temp=" + realData.temp);
 
         ApiService service = RetrofitClient.getClient().create(ApiService.class);
         service.submitSensorData("Bearer " + token, request).enqueue(new Callback<ApiResult<SubmissionResponse>>() {
@@ -111,47 +134,23 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
             public void onResponse(Call<ApiResult<SubmissionResponse>> call, retrofit2.Response<ApiResult<SubmissionResponse>> response) {
                 if (response.isSuccessful() && response.body() != null && response.body().data != null) {
                     SubmissionResponse data = response.body().data;
-                    Log.d("ServerUpload", "하드코딩 submission 전송 성공"
-                            + ": submissionId=" + data.submissionId
-                            + ", sensorId=" + data.sensorId
-                            + ", rewardExp=" + data.rewardExp
-                            + ", characterCollected=" + data.characterCollected);
+                    Log.d("ServerUpload", "실제 데이터 submission 전송 성공"
+                            + ": submissionId=" + data.submissionId);
                     runOnUiThread(() -> callback.onSuccess(data));
                 } else {
-                    Log.e("ServerUpload", "하드코딩 submission 전송 실패 코드: " + response.code());
+                    Log.e("ServerUpload", "서버 응답 오류 코드: " + response.code());
                     runOnUiThread(() -> callback.onError("전송 실패: " + response.code()));
                 }
             }
 
             @Override
             public void onFailure(Call<ApiResult<SubmissionResponse>> call, Throwable t) {
-                Log.e("ServerUpload", "하드코딩 submission 통신 에러: " + t.getMessage());
+                Log.e("ServerUpload", "통신 에러: " + t.getMessage());
                 runOnUiThread(() -> callback.onError("통신 에러: " + t.getMessage()));
             }
         });
     }
 
-    private SubmissionRequest createHardcodedSubmissionRequest(int sensorIndex) {
-        float[] temps = {24.1f, 24.6f, 25.0f, 23.8f, 24.3f};
-        float[] humidities = {42.0f, 44.5f, 41.2f, 45.0f, 43.3f};
-        int[] aqis = {31, 37, 34, 40, 35};
-        int[] eco2s = {520, 545, 538, 560, 532};
-        int[] rssis = {-58, -62, -65, -60, -63};
-        String measuredAt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-                .format(new Date());
-
-        return new SubmissionRequest(
-                sensorIndex + 1L,
-                temps[sensorIndex],
-                humidities[sensorIndex],
-                eco2s[sensorIndex],
-                aqis[sensorIndex],
-                rssis[sensorIndex],
-                currentLat,
-                currentLon,
-                measuredAt
-        );
-    }
 
     public void startGps() {
         if (myLocationManager != null) {
@@ -163,6 +162,11 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
                     getActivity().runOnUiThread(() -> myLocationManager.updateLocation(lat, lon));
                 }
             });
+        }
+    }
+    public void startBleScan() {
+        if (bleManager != null) {
+            bleManager.startScan();
         }
     }
 
@@ -201,4 +205,5 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
         stopBleScan();
         super.onDestroyView();
     }
+
 }

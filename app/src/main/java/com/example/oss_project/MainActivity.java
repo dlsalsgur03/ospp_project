@@ -116,4 +116,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
+    public HomeFragment getHomeFragment() {
+        return homeFragment;
+    }
 }

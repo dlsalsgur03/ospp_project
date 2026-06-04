@@ -83,7 +83,7 @@ public class SensorMarkerManager {
     public static final String[] SENSOR_MAC_ADDRESSES = {
             "D8:3A:DD:79:8E:BF",
             "B8:27:EB:D3:40:06",
-            "88:A2:9E:9B:6A",
+            "88:A2:9E:9B:5E:6A",
             "D8:3A:DD:79:8F:80",
             "D8:3A:DD:C1:88:BD"
     };
@@ -156,7 +156,15 @@ public class SensorMarkerManager {
                 dialog.findViewById(R.id.img_sensor);
         imgSensor.setImageResource(sensorImages[index]);
 
-        dialog.findViewById(R.id.btn_close).setOnClickListener(v -> dialog.dismiss());
+        dialog.findViewById(R.id.btn_close).setOnClickListener(v -> {
+            if (context instanceof MainActivity) {
+                HomeFragment fragment = ((MainActivity) context).getHomeFragment();
+                if (fragment != null) {
+                    fragment.stopBleScan();
+                }
+            }
+            dialog.dismiss();
+        });
 
         Button btnCollect = dialog.findViewById(R.id.btn_collect);
         ProgressBar progressCollect = dialog.findViewById(R.id.progress_collect);
@@ -165,6 +173,12 @@ public class SensorMarkerManager {
             String currentText = btnCollect.getText().toString();
 
             if (currentText.equals("획득")) {
+                if (context instanceof MainActivity) {
+                    HomeFragment fragment = ((MainActivity) context).getHomeFragment();
+                    if (fragment != null) {
+                        fragment.startBleScan();
+                    }
+                }
                 btnCollect.setVisibility(View.GONE);
                 progressCollect.setVisibility(View.VISIBLE);
                 btnCollect.setEnabled(false);
@@ -215,6 +229,12 @@ public class SensorMarkerManager {
                 }
 
             } else if (currentText.equals("수집 완료!")) {
+                if (context instanceof MainActivity) {
+                    HomeFragment fragment = ((MainActivity) context).getHomeFragment();
+                    if (fragment != null) {
+                        fragment.stopBleScan();
+                    }
+                }
                 dialog.dismiss();
             } else if (currentText.equals("다시 시도")) {
                 btnCollect.setText("획득");
@@ -284,14 +304,4 @@ public class SensorMarkerManager {
         return output;
     }
 
-    private boolean isSameHour(long time1, long time2) {
-        if (time1 == 0) return false;
-        java.util.Calendar cal1 = java.util.Calendar.getInstance();
-        cal1.setTimeInMillis(time1);
-        java.util.Calendar cal2 = java.util.Calendar.getInstance();
-        cal2.setTimeInMillis(time2);
-        return cal1.get(java.util.Calendar.YEAR) == cal2.get(java.util.Calendar.YEAR) &&
-                cal1.get(java.util.Calendar.DAY_OF_YEAR) == cal2.get(java.util.Calendar.DAY_OF_YEAR) &&
-                cal1.get(java.util.Calendar.HOUR_OF_DAY) == cal2.get(java.util.Calendar.HOUR_OF_DAY);
-    }
 }

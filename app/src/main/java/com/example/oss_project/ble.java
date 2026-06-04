@@ -138,16 +138,27 @@ public class ble {
                     ? record.getTxPowerLevel()
                     : null;
             Map<ParcelUuid, byte[]> serviceDataMap = record.getServiceData();
+            if (serviceDataMap == null || serviceDataMap.isEmpty()) {
+                return; // 서비스 데이터가 없으면 무시
+            }
 
-            Log.d(TAG, "scan result"
-                    + ": source=scanner"
-                    + ", mac=" + deviceAddress
-                    + ", name=" + deviceName
+            // 우리 센서 UUID(181a)가 있는지 확인
+            boolean isOurSensor = false;
+            for (ParcelUuid uuid : serviceDataMap.keySet()) {
+                if (ENVIRONMENTAL_SENSOR_UUID.equals(uuid)) {
+                    isOurSensor = true;
+                    break;
+                }
+            }
+
+            if (!isOurSensor) {
+                return; // 우리 센서가 아니면 로그도 안 찍고 종료
+            }
+
+            Log.d(TAG, "우리 센서 신호 감지!"
+                    + ": mac=" + deviceAddress
                     + ", rssi=" + rssi
-                    + ", txPower=" + txPower
-                    + ", serviceUuids=" + record.getServiceUuids()
-                    + ", serviceData=" + serviceDataToString(serviceDataMap)
-                    + ", raw=" + bytesToHex(record.getBytes()));
+                    + ", serviceData=" + serviceDataToString(serviceDataMap));
 
             handleServiceData(deviceAddress, deviceName, rssi, txPower, serviceDataMap, "scanner");
         }
