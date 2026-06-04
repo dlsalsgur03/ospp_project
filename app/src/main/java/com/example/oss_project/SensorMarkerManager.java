@@ -30,6 +30,8 @@ public class SensorMarkerManager {
 
     private final Context context;
     private final KakaoMap kakaoMap;
+    private double currentLat;
+    private double currentLon;
 
     public interface SensorCollectListener {
         void onSubmitSensor(int sensorIndex, SubmissionCallback callback);
@@ -63,6 +65,10 @@ public class SensorMarkerManager {
     public BleDeviceData getSensorData(String macAddress) {
         if (macAddress == null) return null;
         return sensorDataMap.get(macAddress.toUpperCase());
+    }
+    public void updateCurrentLocation(double lat, double lon) {
+        currentLat = lat;
+        currentLon = lon;
     }
 
     private static final double[][] SENSOR_POSITIONS = {
@@ -168,6 +174,29 @@ public class SensorMarkerManager {
 
         Button btnCollect = dialog.findViewById(R.id.btn_collect);
         ProgressBar progressCollect = dialog.findViewById(R.id.progress_collect);
+
+        double distance = calculateDistance(
+                currentLat,
+                currentLon,
+                SENSOR_POSITIONS[index][0],
+                SENSOR_POSITIONS[index][1]
+        );
+
+        Log.d("GPS_CHECK",
+                "사용자-센서 거리 = " + distance + "m");
+        if (distance > 10.0) {
+            btnCollect.setEnabled(false);
+            btnCollect.setText(
+                    String.format(
+                            java.util.Locale.KOREA,
+                            "%.1fm 더 이동",
+                            distance - 10.0
+                    )
+            );
+            btnCollect.setBackgroundTintList(
+                    ColorStateList.valueOf(Color.GRAY)
+            );
+        }
 
         btnCollect.setOnClickListener(v -> {
             String currentText = btnCollect.getText().toString();
@@ -302,6 +331,22 @@ public class SensorMarkerManager {
         Canvas canvas = new Canvas(output);
         canvas.drawBitmap(scaled, padding, padding, null);
         return output;
+    }
+    private double calculateDistance(
+            double lat1, double lon1,
+            double lat2, double lon2
+    ) {
+        float[] result = new float[1];
+
+        android.location.Location.distanceBetween(
+                lat1,
+                lon1,
+                lat2,
+                lon2,
+                result
+        );
+
+        return result[0];
     }
 
 }

@@ -158,8 +158,14 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
             myLocationManager.startGps((lat, lon) -> {
                 currentLat = lat;
                 currentLon = lon;
+
+                if (sensorMarkerManager != null) {
+                    sensorMarkerManager.updateCurrentLocation(lat, lon);
+                }
+
                 if (getActivity() != null) {
-                    getActivity().runOnUiThread(() -> myLocationManager.updateLocation(lat, lon));
+                    getActivity().runOnUiThread(() ->
+                            myLocationManager.updateLocation(lat, lon));
                 }
             });
         }
