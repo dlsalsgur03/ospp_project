@@ -7,7 +7,7 @@
     android:background="@drawable/dialog_background"
     android:padding="20dp">
 
-    <!-- X 닫기 버튼 -->
+    <!-- 1. X 닫기 버튼 (최상단) -->
     <ImageButton
         android:id="@+id/btn_close"
         android:layout_width="36dp"
@@ -17,16 +17,15 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"/>
 
-    <!-- 캐릭터 및 폭죽 효과 영역 -->
+    <!-- 2. 캐릭터 영역 (높이를 줄여서 위로 올림) -->
     <FrameLayout
         android:id="@+id/layout_character_container"
         android:layout_width="300dp"
-        android:layout_height="300dp"
+        android:layout_height="220dp"
         app:layout_constraintTop_toBottomOf="@id/btn_close"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <!-- 원형 센서/캐릭터 사진 -->
         <de.hdodenhof.circleimageview.CircleImageView
             android:id="@+id/img_sensor"
             android:layout_width="200dp"
@@ -36,11 +35,12 @@
             app:civ_border_color="#E91E8C" />
     </FrameLayout>
 
-    <!-- 로딩 상태 텍스트 -->
+    <!-- 3. 로딩 상태 텍스트 -->
     <TextView
         android:id="@+id/tv_status"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
         android:text="센서 데이터를 분석 중입니다..."
         android:textColor="#333333"
         android:textSize="16sp"
@@ -49,19 +49,48 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
+    <!-- 4. 로딩 프로그레스바 -->
+    <ProgressBar
+        android:id="@+id/progress_collect"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginTop="10dp"
+        android:visibility="gone"
+        android:indeterminateTint="#E91E8C"
+        app:layout_constraintTop_toBottomOf="@id/tv_status"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- 5. 획득 버튼 (사진과의 간격을 위해 마진 30dp 부여) -->
+    <Button
+        android:id="@+id/btn_collect"
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:layout_marginTop="30dp"
+        android:text="획득"
+        android:textSize="18sp"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#E91E8C"
+        style="@style/Widget.MaterialComponents.Button"
+        app:layout_constraintTop_toBottomOf="@id/progress_collect"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"/>
+
+    <!-- 6. 환경 정보 보기 버튼 -->
     <Button
         android:id="@+id/btn_toggle_sensor_data"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
         android:text="▼ 환경 정보 보기"
         android:visibility="gone"
         android:backgroundTint="#E91E8C"
         android:textColor="#FFFFFF"
-        app:layout_constraintTop_toBottomOf="@id/tv_status"
+        app:layout_constraintTop_toBottomOf="@id/btn_collect"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
 
-    <!-- 측정 데이터 레이아웃 (수집 완료 후 표시) -->
+    <!-- 7. 측정 데이터 레이아웃 (최하단) -->
     <LinearLayout
         android:id="@+id/layout_sensor_data"
         android:layout_width="match_parent"
@@ -100,35 +129,6 @@
             android:textSize="14sp"
             android:layout_marginTop="4dp"
             android:layout_gravity="center"/>
-
     </LinearLayout>
-
-    <!-- 로딩 프로그레스바 -->
-    <ProgressBar
-        android:id="@+id/progress_collect"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_marginTop="10dp"
-        android:visibility="gone"
-        android:indeterminateTint="#E91E8C"
-        app:layout_constraintTop_toBottomOf="@id/layout_sensor_data"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- 획득 버튼 -->
-    <Button
-
-        android:id="@+id/btn_collect"
-        android:layout_width="0dp"
-        android:layout_height="52dp"
-        android:layout_marginTop="20dp"
-        android:text="획득"
-        android:textSize="18sp"
-        android:textColor="#FFFFFF"
-        android:backgroundTint="#E91E8C"
-        style="@style/Widget.MaterialComponents.Button"
-        app:layout_constraintTop_toBottomOf="@id/progress_collect"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"/>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
