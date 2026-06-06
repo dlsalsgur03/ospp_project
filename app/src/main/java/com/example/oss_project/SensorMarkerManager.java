@@ -152,6 +152,9 @@ public class SensorMarkerManager {
         dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
         dialog.setContentView(R.layout.dialog_sensor);
 
+        SharedPreferences prefs =
+                context.getSharedPreferences("collect_pref", Context.MODE_PRIVATE);
+
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawable(
                     new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
@@ -176,15 +179,55 @@ public class SensorMarkerManager {
         });
 
         Button btnCollect = dialog.findViewById(R.id.btn_collect);
-        ProgressBar progressCollect = dialog.findViewById(R.id.progress_collect);
-        TextView tvStatus =
-                dialog.findViewById(R.id.tv_status);
 
+        ProgressBar progressCollect = dialog.findViewById(R.id.progress_collect);
         Button btnToggleSensorData =
                 dialog.findViewById(R.id.btn_toggle_sensor_data);
 
         LinearLayout layoutSensorData =
                 dialog.findViewById(R.id.layout_sensor_data);
+
+        TextView tvTempHum =
+                dialog.findViewById(R.id.tv_temp_hum);
+
+        TextView tvAirEco2 =
+                dialog.findViewById(R.id.tv_air_eco2);
+
+        TextView tvRssi =
+                dialog.findViewById(R.id.tv_rssi);
+        float savedTemp =
+                prefs.getFloat("temp_" + index, -999);
+
+        if(savedTemp != -999){
+
+            float savedHumidity =
+                    prefs.getFloat("humidity_" + index, 0);
+
+            int savedAqi =
+                    prefs.getInt("aqi_" + index, 0);
+
+            int savedEco2 =
+                    prefs.getInt("eco2_" + index, 0);
+
+            int savedRssi =
+                    prefs.getInt("rssi_" + index, 0);
+
+            btnToggleSensorData.setVisibility(View.VISIBLE);
+
+            tvTempHum.setText(
+                    "온도 : " + savedTemp +
+                            "℃ / 습도 : " + savedHumidity + "%"
+            );
+
+            tvAirEco2.setText(
+                    "공기질 : " + savedAqi +
+                            " / eCO₂ : " + savedEco2 + "ppm"
+            );
+
+            tvRssi.setText(
+                    "RSSI : " + savedRssi + " dBm"
+            );
+        }
 
         btnToggleSensorData.setOnClickListener(v -> {
 
@@ -199,18 +242,6 @@ public class SensorMarkerManager {
                 btnToggleSensorData.setText("▼ 환경 정보 보기");
             }
         });
-
-        TextView tvTempHum =
-                dialog.findViewById(R.id.tv_temp_hum);
-
-        TextView tvAirEco2 =
-                dialog.findViewById(R.id.tv_air_eco2);
-
-        TextView tvRssi =
-                dialog.findViewById(R.id.tv_rssi);
-
-        SharedPreferences prefs =
-                context.getSharedPreferences("collect_pref", Context.MODE_PRIVATE);
 
         long lastCollectedTime =
                 prefs.getLong("sensor_time_" + index, 0);
@@ -286,18 +317,49 @@ public class SensorMarkerManager {
                     collectListener.onSubmitSensor(index, new SubmissionCallback() {
                         @Override
                         public void onSuccess(SubmissionResponse response) {
-                            prefs.edit()
-                                    .putLong(
-                                            "sensor_time_" + index,
-                                            System.currentTimeMillis()
-                                    )
-                                    .apply();
+                            BleDeviceData data =
+                                    getSensorData(SENSOR_MAC_ADDRESSES[index]);
+
+                            SharedPreferences.Editor editor = prefs.edit();
+
+                            editor.putLong(
+                                    "sensor_time_" + index,
+                                    System.currentTimeMillis()
+                            );
+
+                            if (data != null) {
+
+                                editor.putFloat(
+                                        "temp_" + index,
+                                        data.temp
+                                );
+
+                                editor.putFloat(
+                                        "humidity_" + index,
+                                        data.humidity
+                                );
+
+                                editor.putInt(
+                                        "aqi_" + index,
+                                        data.aqi
+                                );
+
+                                editor.putInt(
+                                        "eco2_" + index,
+                                        data.eco2
+                                );
+
+                                editor.putInt(
+                                        "rssi_" + index,
+                                        data.rssi
+                                );
+                            }
+
+                            editor.apply();
                             progressCollect.setVisibility(View.GONE);
                             btnCollect.setVisibility(View.VISIBLE);
                             btnCollect.setEnabled(true);
                             btnCollect.setText("수집 완료!");
-                            BleDeviceData data =
-                                    getSensorData(SENSOR_MAC_ADDRESSES[index]);
 
                             if (data != null) {
 
