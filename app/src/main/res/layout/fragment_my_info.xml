@@ -148,11 +148,23 @@
                 android:textColor="#333333"
                 android:textSize="16sp" />
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_participation_history"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="48dp"
+                android:backgroundTint="#FFFFFFFF"
+                android:text="참여 내역"
+                android:textColor="#FFB91858"
+                app:strokeColor="#FFB91858"
+                app:strokeWidth="1dp"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+
             <Button
                 android:id="@+id/btn_logout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="48dp"
+                android:layout_marginTop="12dp"
                 android:backgroundTint="#FFB91858"
                 android:text="로그아웃"
                 android:textColor="#FFFFFF" />

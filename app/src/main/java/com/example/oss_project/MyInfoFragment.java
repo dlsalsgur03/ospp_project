@@ -1,5 +1,6 @@
 package com.example.oss_project;
 
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -8,6 +9,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -15,12 +17,18 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.oss_project.api.ApiResult;
 import com.example.oss_project.api.ApiService;
 import com.example.oss_project.api.MyRankingResponse;
 import com.example.oss_project.api.RetrofitClient;
+import com.example.oss_project.api.SubmissionItemResponse;
+import com.example.oss_project.api.SubmissionPageResponse;
 import com.example.oss_project.api.UserInfoResponse;
+
+import java.util.List;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -30,7 +38,7 @@ public class MyInfoFragment extends Fragment {
 
     private TextView tvEmail, tvNickname, tvCollege, tvDepartment, tvLevel, tvExpLabel, tvTotalSubmissionCount;
     private ProgressBar pbExp;
-    private Button btnLogout;
+    private Button btnLogout, btnParticipationHistory;
     private UserInfoResponse currentUserInfo;
 
     @Nullable
@@ -47,8 +55,10 @@ public class MyInfoFragment extends Fragment {
         tvTotalSubmissionCount = view.findViewById(R.id.tv_total_submission_count);
         pbExp = view.findViewById(R.id.pb_exp);
         btnLogout = view.findViewById(R.id.btn_logout);
+        btnParticipationHistory = view.findViewById(R.id.btn_participation_history);
 
         btnLogout.setOnClickListener(v -> handleLogout());
+        btnParticipationHistory.setOnClickListener(v -> showParticipationHistoryDialog());
 
         fetchUserInfo();
 
@@ -135,6 +145,70 @@ public class MyInfoFragment extends Fragment {
     private String formatRank(Integer rank) {
         if (rank == null || rank <= 0) return "";
         return " (" + rank + "위)";
+    }
+
+    private void showParticipationHistoryDialog() {
+        if (getContext() == null) return;
+
+        View dialogView = LayoutInflater.from(getContext()).inflate(R.layout.dialog_participation_history, null);
+        AlertDialog dialog = new AlertDialog.Builder(getContext())
+                .setView(dialogView)
+                .create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
+        dialog.show();
+
+        ImageButton btnClose = dialogView.findViewById(R.id.btn_close_history);
+        ProgressBar progressHistory = dialogView.findViewById(R.id.progress_history);
+        RecyclerView rvSubmissions = dialogView.findViewById(R.id.rv_submissions);
+        TextView tvTotalCount = dialogView.findViewById(R.id.tv_total_count);
+        TextView tvEmpty = dialogView.findViewById(R.id.tv_empty);
+
+        btnClose.setOnClickListener(v -> dialog.dismiss());
+        rvSubmissions.setLayoutManager(new LinearLayoutManager(getContext()));
+
+        SharedPreferences prefs = getContext().getSharedPreferences("auth_pref", Context.MODE_PRIVATE);
+        String token = prefs.getString("access_token", null);
+        if (token == null) {
+            progressHistory.setVisibility(View.GONE);
+            tvEmpty.setVisibility(View.VISIBLE);
+            return;
+        }
+
+        ApiService service = RetrofitClient.getClient().create(ApiService.class);
+        service.getMySubmissions("Bearer " + token, 0, 50).enqueue(new Callback<ApiResult<SubmissionPageResponse>>() {
+            @Override
+            public void onResponse(Call<ApiResult<SubmissionPageResponse>> call, Response<ApiResult<SubmissionPageResponse>> response) {
+                if (getContext() == null) return;
+                progressHistory.setVisibility(View.GONE);
+
+                if (response.isSuccessful() && response.body() != null && response.body().data != null) {
+                    SubmissionPageResponse data = response.body().data;
+                    List<SubmissionItemResponse> submissions = data.submissions;
+
+                    tvTotalCount.setText("총 " + (data.totalElements != null ? data.totalElements : 0) + "건");
+
+                    if (submissions == null || submissions.isEmpty()) {
+                        tvEmpty.setVisibility(View.VISIBLE);
+                    } else {
+                        rvSubmissions.setVisibility(View.VISIBLE);
+                        rvSubmissions.setAdapter(new SubmissionAdapter(submissions));
+                    }
+                } else {
+                    tvEmpty.setVisibility(View.VISIBLE);
+                    Toast.makeText(getContext(), "참여 내역을 불러오지 못했습니다.", Toast.LENGTH_SHORT).show();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<ApiResult<SubmissionPageResponse>> call, Throwable t) {
+                if (getContext() == null) return;
+                progressHistory.setVisibility(View.GONE);
+                tvEmpty.setVisibility(View.VISIBLE);
+                Toast.makeText(getContext(), "네트워크 에러", Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     private void handleLogout() {
