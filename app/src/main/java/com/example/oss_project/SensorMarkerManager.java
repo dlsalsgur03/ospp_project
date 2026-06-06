@@ -24,9 +24,9 @@ import com.kakao.vectormap.label.Label;
 import com.kakao.vectormap.label.LabelOptions;
 import com.kakao.vectormap.label.LabelStyle;
 import com.kakao.vectormap.label.LabelStyles;
+import com.example.oss_project.api.SubmissionAvailabilityResponse;
 import com.example.oss_project.api.SubmissionResponse;
 import android.content.SharedPreferences;
-import java.util.Calendar;
 import java.util.Random;
 
 public class SensorMarkerManager {
@@ -37,7 +37,13 @@ public class SensorMarkerManager {
     private double currentLon;
 
     public interface SensorCollectListener {
+        void onCheckAvailability(int sensorIndex, AvailabilityCallback callback);
         void onSubmitSensor(int sensorIndex, SubmissionCallback callback);
+    }
+
+    public interface AvailabilityCallback {
+        void onSuccess(SubmissionAvailabilityResponse response);
+        void onError(String message);
     }
 
     public interface SubmissionCallback {
@@ -152,8 +158,7 @@ public class SensorMarkerManager {
         dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
         dialog.setContentView(R.layout.dialog_sensor);
 
-        SharedPreferences prefs =
-                context.getSharedPreferences("collect_pref", Context.MODE_PRIVATE);
+        SharedPreferences prefs = getCollectPreferences();
 
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawable(
@@ -179,6 +184,7 @@ public class SensorMarkerManager {
         });
 
         Button btnCollect = dialog.findViewById(R.id.btn_collect);
+        btnCollect.setEnabled(false);
 
         ProgressBar progressCollect = dialog.findViewById(R.id.progress_collect);
         Button btnToggleSensorData =
@@ -195,6 +201,9 @@ public class SensorMarkerManager {
 
         TextView tvRssi =
                 dialog.findViewById(R.id.tv_rssi);
+
+        checkAvailability(index, btnCollect);
+
         float savedTemp =
                 prefs.getFloat("temp_" + index, -999);
 
@@ -243,61 +252,7 @@ public class SensorMarkerManager {
             }
         });
 
-        long lastCollectedTime =
-                prefs.getLong("sensor_time_" + index, 0);
 
-        long now = System.currentTimeMillis();
-
-        Calendar nextHour = Calendar.getInstance();
-        nextHour.setTimeInMillis(lastCollectedTime);
-
-        nextHour.set(Calendar.MINUTE, 0);
-        nextHour.set(Calendar.SECOND, 0);
-        nextHour.set(Calendar.MILLISECOND, 0);
-
-        nextHour.add(Calendar.HOUR_OF_DAY, 1);
-
-// 기본 상태
-        btnCollect.setEnabled(true);
-        btnCollect.setText("획득");
-        btnCollect.setBackgroundTintList(
-                ColorStateList.valueOf(Color.parseColor("#E91E8C"))
-        );
-
-// 1순위 : 시간 제한
-        if (lastCollectedTime > 0
-                && now < nextHour.getTimeInMillis()) {
-
-            btnCollect.setEnabled(false);
-            btnCollect.setText("다음 정각 이후 가능");
-            btnCollect.setBackgroundTintList(
-                    ColorStateList.valueOf(Color.GRAY)
-            );
-
-        } else {
-
-            // 2순위 : 거리 제한
-            double distance = calculateDistance(
-                    currentLat,
-                    currentLon,
-                    SENSOR_POSITIONS[index][0],
-                    SENSOR_POSITIONS[index][1]
-            );
-
-            Log.d("GPS_CHECK",
-                    "사용자-센서 거리 = " + distance + "m");
-
-            if (distance > 10.0) {
-
-                btnCollect.setEnabled(false);
-
-                btnCollect.setText("센서에 더 접근하세요");
-
-                btnCollect.setBackgroundTintList(
-                        ColorStateList.valueOf(Color.GRAY)
-                );
-            }
-        }
 
         btnCollect.setOnClickListener(v -> {
             String currentText = btnCollect.getText().toString();
@@ -321,11 +276,6 @@ public class SensorMarkerManager {
                                     getSensorData(SENSOR_MAC_ADDRESSES[index]);
 
                             SharedPreferences.Editor editor = prefs.edit();
-
-                            editor.putLong(
-                                    "sensor_time_" + index,
-                                    System.currentTimeMillis()
-                            );
 
                             if (data != null) {
 
@@ -438,6 +388,43 @@ public class SensorMarkerManager {
         });
 
         dialog.show();
+    }
+
+    private void checkAvailability(int index, Button btnCollect) {
+        if (collectListener == null) {
+            btnCollect.setEnabled(true);
+            return;
+        }
+
+        collectListener.onCheckAvailability(index, new AvailabilityCallback() {
+            @Override
+            public void onSuccess(SubmissionAvailabilityResponse response) {
+                if (response != null && !response.available) {
+                    btnCollect.setEnabled(false);
+                    btnCollect.setBackgroundTintList(ColorStateList.valueOf(
+                            Color.parseColor("#9E9E9E")));
+                    return;
+                }
+
+                btnCollect.setEnabled(true);
+                btnCollect.setBackgroundTintList(ColorStateList.valueOf(
+                        Color.parseColor("#E91E8C")));
+            }
+
+            @Override
+            public void onError(String message) {
+                btnCollect.setEnabled(true);
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private SharedPreferences getCollectPreferences() {
+        SharedPreferences authPrefs =
+                context.getSharedPreferences("auth_pref", Context.MODE_PRIVATE);
+        String token = authPrefs.getString("access_token", null);
+        String suffix = token == null ? "guest" : Integer.toHexString(token.hashCode());
+        return context.getSharedPreferences("collect_pref_" + suffix, Context.MODE_PRIVATE);
     }
 
     private void playCelebrateAnimation(android.app.Dialog dialog, View targetView) {

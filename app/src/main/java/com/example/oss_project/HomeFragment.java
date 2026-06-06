@@ -15,6 +15,7 @@ import androidx.fragment.app.Fragment;
 import com.example.oss_project.api.ApiService;
 import com.example.oss_project.api.ApiResult;
 import com.example.oss_project.api.RetrofitClient;
+import com.example.oss_project.api.SubmissionAvailabilityResponse;
 import com.example.oss_project.api.SubmissionRequest;
 import com.example.oss_project.api.SubmissionResponse;
 import com.kakao.vectormap.KakaoMap;
@@ -72,6 +73,11 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
 
                 sensorMarkerManager.setSensorCollectListener(new SensorMarkerManager.SensorCollectListener() {
                     @Override
+                    public void onCheckAvailability(int sensorIndex, SensorMarkerManager.AvailabilityCallback callback) {
+                        checkSubmissionAvailability(sensorIndex, callback);
+                    }
+
+                    @Override
                     public void onSubmitSensor(int sensorIndex, SensorMarkerManager.SubmissionCallback callback) {
                         submitSensorData(sensorIndex, callback);
                     }
@@ -85,6 +91,41 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
         });
 
         return view;
+    }
+
+    private void checkSubmissionAvailability(int sensorIndex, SensorMarkerManager.AvailabilityCallback callback) {
+        if (getContext() == null) {
+            callback.onError("화면 상태가 올바르지 않습니다.");
+            return;
+        }
+
+        SharedPreferences prefs = getContext().getSharedPreferences("auth_pref", Context.MODE_PRIVATE);
+        String token = prefs.getString("access_token", null);
+        if (token == null || token.isEmpty()) {
+            callback.onError("로그인 정보가 없습니다. 다시 로그인해 주세요.");
+            return;
+        }
+
+        ApiService service = RetrofitClient.getClient().create(ApiService.class);
+        service.getSubmissionAvailability("Bearer " + token, sensorIndex + 1L)
+                .enqueue(new Callback<ApiResult<SubmissionAvailabilityResponse>>() {
+                    @Override
+                    public void onResponse(Call<ApiResult<SubmissionAvailabilityResponse>> call,
+                                           retrofit2.Response<ApiResult<SubmissionAvailabilityResponse>> response) {
+                        if (response.isSuccessful() && response.body() != null && response.body().data != null) {
+                            runOnUiThread(() -> callback.onSuccess(response.body().data));
+                        } else {
+                            Log.e("ServerUpload", "수집 가능 여부 응답 오류 코드: " + response.code());
+                            runOnUiThread(() -> callback.onError("수집 가능 여부 확인 실패: " + response.code()));
+                        }
+                    }
+
+                    @Override
+                    public void onFailure(Call<ApiResult<SubmissionAvailabilityResponse>> call, Throwable t) {
+                        Log.e("ServerUpload", "수집 가능 여부 통신 에러: " + t.getMessage());
+                        runOnUiThread(() -> callback.onError("통신 에러: " + t.getMessage()));
+                    }
+                });
     }
 
     private void submitSensorData(int sensorIndex, SensorMarkerManager.SubmissionCallback callback) {
