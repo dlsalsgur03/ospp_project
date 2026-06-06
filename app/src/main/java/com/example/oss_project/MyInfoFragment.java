@@ -22,6 +22,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.oss_project.api.ApiResult;
 import com.example.oss_project.api.ApiService;
+import com.example.oss_project.api.LevelInfoResponse;
 import com.example.oss_project.api.MyRankingResponse;
 import com.example.oss_project.api.RetrofitClient;
 import com.example.oss_project.api.SubmissionItemResponse;
@@ -88,12 +89,8 @@ public class MyInfoFragment extends Fragment {
                     tvNickname.setText(info.nickname);
                     tvCollege.setText(info.college);
                     tvDepartment.setText(info.department);
-                    tvLevel.setText("Lv. " + info.level);
-                    
-                    // EXP 설정 (1000 기준)
-                    tvExpLabel.setText("EXP " + info.exp + " / 1000");
-                    pbExp.setProgress(info.exp);
 
+                    fetchLevelInfo(token);
                     fetchMyRanking(token);
                 } else {
                     if (getContext() != null) {
@@ -106,6 +103,36 @@ public class MyInfoFragment extends Fragment {
             public void onFailure(Call<ApiResult<UserInfoResponse>> call, Throwable t) {
                 if (getContext() != null) {
                     Toast.makeText(getContext(), "네트워크 에러", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+    }
+
+    private void fetchLevelInfo(String token) {
+        ApiService service = RetrofitClient.getClient().create(ApiService.class);
+        service.getLevelInfo("Bearer " + token).enqueue(new Callback<ApiResult<LevelInfoResponse>>() {
+            @Override
+            public void onResponse(Call<ApiResult<LevelInfoResponse>> call, Response<ApiResult<LevelInfoResponse>> response) {
+                if (response.isSuccessful() && response.body() != null && response.body().data != null) {
+                    LevelInfoResponse info = response.body().data;
+
+                    tvLevel.setText("Lv. " + info.level);
+
+                    int inLevelExp = (info.currentExp != null && info.currentLevelMinExp != null)
+                            ? info.currentExp - info.currentLevelMinExp : 0;
+                    int levelRange = (info.nextLevelExp != null && info.currentLevelMinExp != null)
+                            ? info.nextLevelExp - info.currentLevelMinExp : 1;
+                    tvExpLabel.setText("EXP " + inLevelExp + " / " + levelRange);
+
+                    int progress = (info.progressRate != null) ? (int) Math.round(info.progressRate) : 0;
+                    pbExp.setProgress(progress);
+                }
+            }
+
+            @Override
+            public void onFailure(Call<ApiResult<LevelInfoResponse>> call, Throwable t) {
+                if (getContext() != null) {
+                    Toast.makeText(getContext(), "레벨 정보를 불러오지 못했습니다.", Toast.LENGTH_SHORT).show();
                 }
             }
         });

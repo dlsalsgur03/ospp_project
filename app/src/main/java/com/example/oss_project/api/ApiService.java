@@ -32,6 +32,9 @@ public interface ApiService {
     @GET("api/users/me")
     Call<ApiResult<UserInfoResponse>> getUserInfo(@Header("Authorization") String token);
 
+    @GET("api/users/me/level")
+    Call<ApiResult<LevelInfoResponse>> getLevelInfo(@Header("Authorization") String token);
+
     @GET("api/users/me/characters/dex")
     Call<ApiResult<DexData>> getCharacterDex(@Header("Authorization") String token);
 
