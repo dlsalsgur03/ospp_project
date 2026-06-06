@@ -3,11 +3,11 @@ package com.example.oss_project;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
-import androidx.fragment.app.Fragment;
 
 import com.kakao.vectormap.KakaoMapSdk;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
@@ -71,6 +71,7 @@ public class MainActivity extends AppCompatActivity {
                 return true;
             } else if (id == R.id.nav_book && bookFragment != null) {
                 getSupportFragmentManager().beginTransaction().show(bookFragment).hide(homeFragment).hide(rankingFragment).hide(myInfoFragment).commit();
+                bookFragment.refreshDexData();
                 return true;
             } else if (id == R.id.nav_my_info && myInfoFragment != null) {
                 getSupportFragmentManager().beginTransaction().show(myInfoFragment).hide(homeFragment).hide(rankingFragment).hide(bookFragment).commit();
@@ -85,28 +86,37 @@ public class MainActivity extends AppCompatActivity {
                 ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED ||
                 ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
 
+            Log.d("BLE_SCAN", "권한 요청: 위치/BLE 스캔/BLE 연결");
             ActivityCompat.requestPermissions(this, new String[]{
                     Manifest.permission.ACCESS_FINE_LOCATION,
                     Manifest.permission.BLUETOOTH_SCAN,
                     Manifest.permission.BLUETOOTH_CONNECT
             }, 100);
         } else {
-            startHomeFragmentLogic();
-        }
-    }
-
-    private void startHomeFragmentLogic() {
-        Fragment currentFragment = getSupportFragmentManager().findFragmentById(R.id.main_container);
-        if (currentFragment instanceof HomeFragment) {
-            ((HomeFragment) currentFragment).startGpsAndScan();
+            Log.d("BLE_SCAN", "권한 확인 완료: 자동 BLE 스캔은 시작하지 않음");
         }
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == 100 && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            startHomeFragmentLogic();
+        if (requestCode == 100) {
+            boolean allGranted = grantResults.length >= 3;
+            for (int result : grantResults) {
+                if (result != PackageManager.PERMISSION_GRANTED) {
+                    allGranted = false;
+                    break;
+                }
+            }
+
+            if (allGranted) {
+                Log.d("BLE_SCAN", "권한 허용 완료: 자동 BLE 스캔은 시작하지 않음");
+            } else {
+                Log.d("BLE_SCAN", "BLE 스캔 시작 실패: 필수 권한 거부됨");
+            }
         }
+    }
+    public HomeFragment getHomeFragment() {
+        return homeFragment;
     }
 }

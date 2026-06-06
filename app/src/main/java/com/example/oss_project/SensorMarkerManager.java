@@ -7,8 +7,6 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.os.Handler;
-import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -24,19 +22,25 @@ import com.kakao.vectormap.label.Label;
 import com.kakao.vectormap.label.LabelOptions;
 import com.kakao.vectormap.label.LabelStyle;
 import com.kakao.vectormap.label.LabelStyles;
-
+import com.example.oss_project.api.SubmissionResponse;
+import android.content.SharedPreferences;
+import java.util.Calendar;
 import java.util.Random;
 
 public class SensorMarkerManager {
 
     private final Context context;
     private final KakaoMap kakaoMap;
-    private Integer currentSpawnedId = null;
-    private int luckySensorIndex; // 당첨 센서 인덱스 (0~4)
+    private double currentLat;
+    private double currentLon;
 
     public interface SensorCollectListener {
-        void onStartScan();
-        void onStopScanAndUpload(int sensorIndex, Integer characterId);
+        void onSubmitSensor(int sensorIndex, SubmissionCallback callback);
+    }
+
+    public interface SubmissionCallback {
+        void onSuccess(SubmissionResponse response);
+        void onError(String message);
     }
 
     private SensorCollectListener collectListener;
@@ -48,8 +52,6 @@ public class SensorMarkerManager {
     public SensorMarkerManager(Context context, KakaoMap kakaoMap) {
         this.context = context;
         this.kakaoMap = kakaoMap;
-        this.luckySensorIndex = new java.util.Random().nextInt(5);
-        android.util.Log.d("CharacterSpawn", "이번 수집 사이클 당첨 센서: " + (luckySensorIndex + 1) + "번");
     }
 
     private final java.util.Map<String, BleDeviceData> sensorDataMap = new java.util.HashMap<>();
@@ -64,6 +66,10 @@ public class SensorMarkerManager {
     public BleDeviceData getSensorData(String macAddress) {
         if (macAddress == null) return null;
         return sensorDataMap.get(macAddress.toUpperCase());
+    }
+    public void updateCurrentLocation(double lat, double lon) {
+        currentLat = lat;
+        currentLon = lon;
     }
 
     private static final double[][] SENSOR_POSITIONS = {
@@ -84,7 +90,7 @@ public class SensorMarkerManager {
     public static final String[] SENSOR_MAC_ADDRESSES = {
             "D8:3A:DD:79:8E:BF",
             "B8:27:EB:D3:40:06",
-            "88:A2:9E:9B:6A",
+            "88:A2:9E:9B:5E:6A",
             "D8:3A:DD:79:8F:80",
             "D8:3A:DD:C1:88:BD"
     };
@@ -157,63 +163,160 @@ public class SensorMarkerManager {
                 dialog.findViewById(R.id.img_sensor);
         imgSensor.setImageResource(sensorImages[index]);
 
-        dialog.findViewById(R.id.btn_close).setOnClickListener(v -> dialog.dismiss());
+        dialog.findViewById(R.id.btn_close).setOnClickListener(v -> {
+            if (context instanceof MainActivity) {
+                HomeFragment fragment = ((MainActivity) context).getHomeFragment();
+                if (fragment != null) {
+                    fragment.stopBleScan();
+                }
+            }
+            dialog.dismiss();
+        });
 
         Button btnCollect = dialog.findViewById(R.id.btn_collect);
         ProgressBar progressCollect = dialog.findViewById(R.id.progress_collect);
+
+        SharedPreferences prefs =
+                context.getSharedPreferences("collect_pref", Context.MODE_PRIVATE);
+
+        long lastCollectedTime =
+                prefs.getLong("sensor_time_" + index, 0);
+
+        long now = System.currentTimeMillis();
+
+        Calendar nextHour = Calendar.getInstance();
+        nextHour.setTimeInMillis(lastCollectedTime);
+
+        nextHour.set(Calendar.MINUTE, 0);
+        nextHour.set(Calendar.SECOND, 0);
+        nextHour.set(Calendar.MILLISECOND, 0);
+
+        nextHour.add(Calendar.HOUR_OF_DAY, 1);
+
+// 기본 상태
+        btnCollect.setEnabled(true);
+        btnCollect.setText("획득");
+        btnCollect.setBackgroundTintList(
+                ColorStateList.valueOf(Color.parseColor("#E91E8C"))
+        );
+
+// 1순위 : 시간 제한
+        if (lastCollectedTime > 0
+                && now < nextHour.getTimeInMillis()) {
+
+            btnCollect.setEnabled(false);
+            btnCollect.setText("다음 정각 이후 가능");
+            btnCollect.setBackgroundTintList(
+                    ColorStateList.valueOf(Color.GRAY)
+            );
+
+        } else {
+
+            // 2순위 : 거리 제한
+            double distance = calculateDistance(
+                    currentLat,
+                    currentLon,
+                    SENSOR_POSITIONS[index][0],
+                    SENSOR_POSITIONS[index][1]
+            );
+
+            Log.d("GPS_CHECK",
+                    "사용자-센서 거리 = " + distance + "m");
+
+            if (distance > 10.0) {
+
+                btnCollect.setEnabled(false);
+
+                btnCollect.setText(
+                        String.format(
+                                java.util.Locale.KOREA,
+                                "%.1fm 더 이동",
+                                distance - 10.0
+                        )
+                );
+
+                btnCollect.setBackgroundTintList(
+                        ColorStateList.valueOf(Color.GRAY)
+                );
+            }
+        }
 
         btnCollect.setOnClickListener(v -> {
             String currentText = btnCollect.getText().toString();
 
             if (currentText.equals("획득")) {
+                if (context instanceof MainActivity) {
+                    HomeFragment fragment = ((MainActivity) context).getHomeFragment();
+                    if (fragment != null) {
+                        fragment.startBleScan();
+                    }
+                }
                 btnCollect.setVisibility(View.GONE);
                 progressCollect.setVisibility(View.VISIBLE);
+                btnCollect.setEnabled(false);
 
                 if (collectListener != null) {
-                    collectListener.onStartScan();
-                }
+                    collectListener.onSubmitSensor(index, new SubmissionCallback() {
+                        @Override
+                        public void onSuccess(SubmissionResponse response) {
+                            prefs.edit()
+                                    .putLong(
+                                            "sensor_time_" + index,
+                                            System.currentTimeMillis()
+                                    )
+                                    .apply();
+                            progressCollect.setVisibility(View.GONE);
+                            btnCollect.setVisibility(View.VISIBLE);
+                            btnCollect.setEnabled(true);
+                            btnCollect.setText("수집 완료!");
+                            btnCollect.setBackgroundTintList(ColorStateList.valueOf(
+                                    Color.parseColor("#4CAF50")));
 
-                // 4초간 로딩 연출
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    progressCollect.setVisibility(View.GONE);
-                    btnCollect.setVisibility(View.VISIBLE);
-                    btnCollect.setText("수집 완료!");
-                    btnCollect.setBackgroundTintList(ColorStateList.valueOf(
-                            Color.parseColor("#4CAF50")));
-
-                    // ★ 캐릭터 스폰 로직 (5개 중 1개 당첨 방식)
-                    if (index == luckySensorIndex) {
-                        currentSpawnedId = CharacterManager.generateRandomSpawn();
-                        // 혹시 generateRandomSpawn에서 20% 확률 때문에 null이 나오면 안되므로 
-                        // 무조건 나오게 하거나 확률을 높여야 합니다. 
-                        // 여기서는 '당첨 센서'이므로 무조건 캐릭터가 나오도록 보정합니다.
-                        if (currentSpawnedId == null) {
-                            // 다시 굴려서 무조건 하나 선택 (Common 76%, Silver 18%, Gold 6%)
-                            double roll = new Random().nextDouble() * 100;
-                            int sub = new Random().nextInt(6);
-                            if (roll < 76) currentSpawnedId = sub + 1;
-                            else if (roll < 94) currentSpawnedId = sub + 7;
-                            else currentSpawnedId = sub + 13;
+                            if (response != null
+                                    && Boolean.TRUE.equals(response.characterCollected)
+                                    && response.characterReward != null
+                                    && response.characterReward.characterId != null) {
+                                int characterId = response.characterReward.characterId.intValue();
+                                int resId = CharacterManager.getCharacterDrawableId(characterId);
+                                imgSensor.setImageBitmap(getScaledBitmapWithPadding(resId, 500, 100));
+                                playCelebrateAnimation(dialog, imgSensor);
+                                Toast.makeText(context,
+                                        "새로운 캐릭터 발견: " + response.characterReward.characterName,
+                                        Toast.LENGTH_SHORT).show();
+                            } else {
+                                Toast.makeText(context, "경험치를 획득했습니다!", Toast.LENGTH_SHORT).show();
+                            }
                         }
 
-                        int resId = CharacterManager.getCharacterDrawableId(currentSpawnedId);
-                        imgSensor.setImageBitmap(getScaledBitmapWithPadding(resId, 500, 100));
-                        playCelebrateAnimation(dialog, imgSensor);
-                        Toast.makeText(context, "새로운 캐릭터 발견!", Toast.LENGTH_SHORT).show();
-                        
-                        // 수집 성공 후 다음 사이클을 위해 당첨 위치 변경
-                        luckySensorIndex = new Random().nextInt(5);
-                    } else {
-                        currentSpawnedId = null;
-                        Toast.makeText(context, "경험치를 획득했습니다!", Toast.LENGTH_SHORT).show();
-                    }
-                }, 4000);
+                        @Override
+                        public void onError(String message) {
+                            progressCollect.setVisibility(View.GONE);
+                            btnCollect.setVisibility(View.VISIBLE);
+                            btnCollect.setEnabled(true);
+                            btnCollect.setText("다시 시도");
+                            btnCollect.setBackgroundTintList(ColorStateList.valueOf(
+                                    Color.parseColor("#E91E8C")));
+                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                } else {
+                    progressCollect.setVisibility(View.GONE);
+                    btnCollect.setVisibility(View.VISIBLE);
+                    btnCollect.setEnabled(true);
+                    Toast.makeText(context, "전송 준비가 되지 않았습니다.", Toast.LENGTH_SHORT).show();
+                }
 
             } else if (currentText.equals("수집 완료!")) {
-                if (collectListener != null) {
-                    collectListener.onStopScanAndUpload(index, currentSpawnedId);
+                if (context instanceof MainActivity) {
+                    HomeFragment fragment = ((MainActivity) context).getHomeFragment();
+                    if (fragment != null) {
+                        fragment.stopBleScan();
+                    }
                 }
                 dialog.dismiss();
+            } else if (currentText.equals("다시 시도")) {
+                btnCollect.setText("획득");
+                btnCollect.performClick();
             }
         });
 
@@ -278,15 +381,21 @@ public class SensorMarkerManager {
         canvas.drawBitmap(scaled, padding, padding, null);
         return output;
     }
+    private double calculateDistance(
+            double lat1, double lon1,
+            double lat2, double lon2
+    ) {
+        float[] result = new float[1];
 
-    private boolean isSameHour(long time1, long time2) {
-        if (time1 == 0) return false;
-        java.util.Calendar cal1 = java.util.Calendar.getInstance();
-        cal1.setTimeInMillis(time1);
-        java.util.Calendar cal2 = java.util.Calendar.getInstance();
-        cal2.setTimeInMillis(time2);
-        return cal1.get(java.util.Calendar.YEAR) == cal2.get(java.util.Calendar.YEAR) &&
-                cal1.get(java.util.Calendar.DAY_OF_YEAR) == cal2.get(java.util.Calendar.DAY_OF_YEAR) &&
-                cal1.get(java.util.Calendar.HOUR_OF_DAY) == cal2.get(java.util.Calendar.HOUR_OF_DAY);
+        android.location.Location.distanceBetween(
+                lat1,
+                lon1,
+                lat2,
+                lon2,
+                result
+        );
+
+        return result[0];
     }
+
 }

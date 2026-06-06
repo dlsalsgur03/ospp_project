@@ -5,6 +5,7 @@ import retrofit2.http.Body;
 import retrofit2.http.GET;
 import retrofit2.http.Header;
 import retrofit2.http.POST;
+import retrofit2.http.Query;
 
 public interface ApiService {
     @POST("api/auth/signup")
@@ -33,4 +34,32 @@ public interface ApiService {
 
     @GET("api/users/me/characters/dex")
     Call<ApiResult<DexData>> getCharacterDex(@Header("Authorization") String token);
+
+    @GET("api/characters")
+    Call<ApiResult<CharacterListResponse>> getCharacters();
+
+    @GET("api/characters/spawns")
+    Call<ApiResult<CharacterSpawnListResponse>> getCurrentCharacterSpawns();
+
+    @GET("api/users/me/characters")
+    Call<ApiResult<MyCharacterListResponse>> getMyCharacters(@Header("Authorization") String token);
+
+    @GET("api/submissions/availability")
+    Call<ApiResult<SubmissionAvailabilityResponse>> getSubmissionAvailability(
+            @Header("Authorization") String token,
+            @Query("sensorId") long sensorId
+    );
+
+    @POST("api/submissions")
+    Call<ApiResult<SubmissionResponse>> submitSensorData(
+            @Header("Authorization") String token,
+            @Body SubmissionRequest request
+    );
+
+    @GET("api/submissions/me")
+    Call<ApiResult<SubmissionPageResponse>> getMySubmissions(
+            @Header("Authorization") String token,
+            @Query("page") int page,
+            @Query("size") int size
+    );
 }

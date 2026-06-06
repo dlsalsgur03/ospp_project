@@ -1,12 +1,12 @@
 package com.example.oss_project;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -14,10 +14,9 @@ import androidx.fragment.app.Fragment;
 
 import com.example.oss_project.api.ApiService;
 import com.example.oss_project.api.ApiResult;
-import com.example.oss_project.api.Response;
 import com.example.oss_project.api.RetrofitClient;
-import com.example.oss_project.api.comm_data;
-import com.example.oss_project.api.postdata;
+import com.example.oss_project.api.SubmissionRequest;
+import com.example.oss_project.api.SubmissionResponse;
 import com.kakao.vectormap.KakaoMap;
 import com.kakao.vectormap.KakaoMapReadyCallback;
 import com.kakao.vectormap.LatLng;
@@ -25,7 +24,10 @@ import com.kakao.vectormap.MapLifeCycleCallback;
 import com.kakao.vectormap.MapView;
 import com.kakao.vectormap.camera.CameraUpdateFactory;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -49,6 +51,10 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
         bleManager = new ble();
         bleManager.bleInitialize(this);
 
+        if (getActivity() instanceof MainActivity) {
+            ((MainActivity) getActivity()).checkPermissionsAndStart();
+        }
+
         mapView = view.findViewById(R.id.map_view);
         mapView.start(new MapLifeCycleCallback() {
             @Override
@@ -66,79 +72,112 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
 
                 sensorMarkerManager.setSensorCollectListener(new SensorMarkerManager.SensorCollectListener() {
                     @Override
-                    public void onStartScan() {
-                        if (bleManager != null) {
-                            bleManager.startScan();
-                            Log.d("HomeFragment", "BLE 스캔 시작");
-                        }
-                    }
-
-                    @Override
-                    public void onStopScanAndUpload(int sensorIndex, Integer characterId) {
-                        if (bleManager != null) {
-                            bleManager.stopScan();
-                            uploadDataToServer(sensorIndex, characterId);
-                        }
+                    public void onSubmitSensor(int sensorIndex, SensorMarkerManager.SubmissionCallback callback) {
+                        submitSensorData(sensorIndex, callback);
                     }
                 });
 
                 kakaoMap.moveCamera(CameraUpdateFactory.newCenterPosition(LatLng.from(currentLat, currentLon), 16));
                 sensorMarkerManager.addSensorMarkers();
+                startGps();
 
-                if (getActivity() instanceof MainActivity) {
-                    ((MainActivity) getActivity()).checkPermissionsAndStart();
-                }
             }
         });
 
         return view;
     }
 
-    private void uploadDataToServer(int sensorIndex, Integer characterId) {
-        if (sensorMarkerManager == null || getContext() == null) return;
-
-        String macAddress = SensorMarkerManager.SENSOR_MAC_ADDRESSES[sensorIndex];
-        BleDeviceData latestData = sensorMarkerManager.getSensorData(macAddress);
-
-        if (latestData != null) {
-            String androidId = Settings.Secure.getString(getContext().getContentResolver(), Settings.Secure.ANDROID_ID);
-            postdata pd = RetrofitClient.makePostData(latestData, currentLat, currentLon, androidId, characterId);
-
-            comm_data service = RetrofitClient.getClient().create(comm_data.class);
-            service.post_json(pd).enqueue(new Callback<Response>() {
-                @Override
-                public void onResponse(Call<Response> call, retrofit2.Response<Response> response) {
-                    if (response.isSuccessful() && response.body() != null) {
-                        Log.d("ServerUpload", "데이터 전송 성공: " + response.body().message);
-                        if (getActivity() != null) {
-                            getActivity().runOnUiThread(() -> Toast.makeText(getContext(), "수집 및 전송 완료!", Toast.LENGTH_SHORT).show());
-                        }
-                    } else {
-                        Log.e("ServerUpload", "데이터 전송 실패 코드: " + response.code());
-                    }
-                }
-                @Override
-                public void onFailure(Call<Response> call, Throwable t) {
-                    Log.e("ServerUpload", "통신 에러: " + t.getMessage());
-                }
-            });
-        } else {
-            Toast.makeText(getContext(), "수집된 센서 데이터가 없습니다. (MAC: " + macAddress + ")", Toast.LENGTH_SHORT).show();
+    private void submitSensorData(int sensorIndex, SensorMarkerManager.SubmissionCallback callback) {
+        if (getContext() == null) {
+            callback.onError("화면 상태가 올바르지 않습니다.");
+            return;
         }
+
+        SharedPreferences prefs = getContext().getSharedPreferences("auth_pref", Context.MODE_PRIVATE);
+        String token = prefs.getString("access_token", null);
+        if (token == null || token.isEmpty()) {
+            callback.onError("로그인 정보가 없습니다. 다시 로그인해 주세요.");
+            return;
+        }
+
+        // 실제 스캔된 데이터 가져오기
+        String macAddress = SensorMarkerManager.SENSOR_MAC_ADDRESSES[sensorIndex];
+        BleDeviceData realData = sensorMarkerManager.getSensorData(macAddress);
+
+        if (realData == null) {
+            callback.onError("센서 신호가 감지되지 않았습니다. 센서 근처에서 다시 시도해 주세요.");
+            Log.e("ServerUpload", "데이터 없음: MAC=" + macAddress);
+            return;
+        }
+
+        String measuredAt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(new Date());
+        SubmissionRequest request = new SubmissionRequest(
+                sensorIndex + 1L,
+                realData.temp,
+                realData.humidity,
+                realData.eco2,
+                realData.aqi,
+                realData.rssi,
+                currentLat,
+                currentLon,
+                measuredAt
+        );
+
+        Log.d("ServerUpload", "실제 BLE 데이터 submission 전송"
+                + ": sensorIndex=" + sensorIndex
+                + ", mac=" + macAddress
+                + ", temp=" + realData.temp);
+
+        ApiService service = RetrofitClient.getClient().create(ApiService.class);
+        service.submitSensorData("Bearer " + token, request).enqueue(new Callback<ApiResult<SubmissionResponse>>() {
+            @Override
+            public void onResponse(Call<ApiResult<SubmissionResponse>> call, retrofit2.Response<ApiResult<SubmissionResponse>> response) {
+                if (response.isSuccessful() && response.body() != null && response.body().data != null) {
+                    SubmissionResponse data = response.body().data;
+                    Log.d("ServerUpload", "실제 데이터 submission 전송 성공"
+                            + ": submissionId=" + data.submissionId);
+                    runOnUiThread(() -> callback.onSuccess(data));
+                } else {
+                    Log.e("ServerUpload", "서버 응답 오류 코드: " + response.code());
+                    runOnUiThread(() -> callback.onError("전송 실패: " + response.code()));
+                }
+            }
+
+            @Override
+            public void onFailure(Call<ApiResult<SubmissionResponse>> call, Throwable t) {
+                Log.e("ServerUpload", "통신 에러: " + t.getMessage());
+                runOnUiThread(() -> callback.onError("통신 에러: " + t.getMessage()));
+            }
+        });
     }
 
-    public void startGpsAndScan() {
+
+    public void startGps() {
         if (myLocationManager != null) {
             myLocationManager.addMyLocationMarker(currentLat, currentLon);
             myLocationManager.startGps((lat, lon) -> {
                 currentLat = lat;
                 currentLon = lon;
+
+                if (sensorMarkerManager != null) {
+                    sensorMarkerManager.updateCurrentLocation(lat, lon);
+                }
+
                 if (getActivity() != null) {
-                    getActivity().runOnUiThread(() -> myLocationManager.updateLocation(lat, lon));
+                    getActivity().runOnUiThread(() ->
+                            myLocationManager.updateLocation(lat, lon));
                 }
             });
         }
-        if (bleManager != null) bleManager.startScan();
+    }
+    public void startBleScan() {
+        if (bleManager != null) {
+            bleManager.startScan();
+        }
+    }
+
+    public void stopBleScan() {
+        if (bleManager != null) bleManager.stopScan();
     }
 
     @Override
@@ -163,6 +202,14 @@ public class HomeFragment extends Fragment implements ble.BleCallback {
     @Override
     public void onPause() {
         super.onPause();
+        stopBleScan();
         if (mapView != null) mapView.pause();
     }
+
+    @Override
+    public void onDestroyView() {
+        stopBleScan();
+        super.onDestroyView();
+    }
+
 }
