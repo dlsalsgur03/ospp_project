@@ -36,7 +36,74 @@
             app:civ_border_color="#E91E8C" />
     </FrameLayout>
 
-    <!-- 로딩 프로그레스바 (초기 숨김) -->
+    <!-- 로딩 상태 텍스트 -->
+    <TextView
+        android:id="@+id/tv_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="센서 데이터를 분석 중입니다..."
+        android:textColor="#333333"
+        android:textSize="16sp"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/layout_character_container"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <Button
+        android:id="@+id/btn_toggle_sensor_data"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="▼ 환경 정보 보기"
+        android:visibility="gone"
+        android:backgroundTint="#E91E8C"
+        android:textColor="#FFFFFF"
+        app:layout_constraintTop_toBottomOf="@id/tv_status"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"/>
+
+    <!-- 측정 데이터 레이아웃 (수집 완료 후 표시) -->
+    <LinearLayout
+        android:id="@+id/layout_sensor_data"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="#F5F5F5"
+        android:padding="12dp"
+        android:layout_marginTop="10dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/btn_toggle_sensor_data">
+
+        <TextView
+            android:id="@+id/tv_temp_hum"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="온도: --°C / 습도: --%"
+            android:textColor="#000000"
+            android:textSize="14sp"
+            android:layout_gravity="center" />
+
+        <TextView
+            android:id="@+id/tv_air_eco2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="공기질: -- / eCO2: --ppm"
+            android:textColor="#000000"
+            android:textSize="14sp"
+            android:layout_marginTop="4dp"
+            android:layout_gravity="center" />
+        <TextView
+            android:id="@+id/tv_rssi"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="RSSI : -- dBm"
+            android:textColor="#000000"
+            android:textSize="14sp"
+            android:layout_marginTop="4dp"
+            android:layout_gravity="center"/>
+
+    </LinearLayout>
+
+    <!-- 로딩 프로그레스바 -->
     <ProgressBar
         android:id="@+id/progress_collect"
         android:layout_width="40dp"
@@ -44,12 +111,13 @@
         android:layout_marginTop="10dp"
         android:visibility="gone"
         android:indeterminateTint="#E91E8C"
-        app:layout_constraintTop_toBottomOf="@id/layout_character_container"
+        app:layout_constraintTop_toBottomOf="@id/layout_sensor_data"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
     <!-- 획득 버튼 -->
     <Button
+
         android:id="@+id/btn_collect"
         android:layout_width="0dp"
         android:layout_height="52dp"
@@ -59,7 +127,7 @@
         android:textColor="#FFFFFF"
         android:backgroundTint="#E91E8C"
         style="@style/Widget.MaterialComponents.Button"
-        app:layout_constraintTop_toBottomOf="@id/layout_character_container"
+        app:layout_constraintTop_toBottomOf="@id/progress_collect"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent"/>
 

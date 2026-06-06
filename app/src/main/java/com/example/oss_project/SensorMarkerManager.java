@@ -13,7 +13,9 @@ import android.view.ViewGroup;
 import android.view.animation.OvershootInterpolator;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.kakao.vectormap.KakaoMap;
@@ -175,6 +177,37 @@ public class SensorMarkerManager {
 
         Button btnCollect = dialog.findViewById(R.id.btn_collect);
         ProgressBar progressCollect = dialog.findViewById(R.id.progress_collect);
+        TextView tvStatus =
+                dialog.findViewById(R.id.tv_status);
+
+        Button btnToggleSensorData =
+                dialog.findViewById(R.id.btn_toggle_sensor_data);
+
+        LinearLayout layoutSensorData =
+                dialog.findViewById(R.id.layout_sensor_data);
+
+        btnToggleSensorData.setOnClickListener(v -> {
+
+            if (layoutSensorData.getVisibility() == View.GONE) {
+
+                layoutSensorData.setVisibility(View.VISIBLE);
+                btnToggleSensorData.setText("▲ 환경 정보 접기");
+
+            } else {
+
+                layoutSensorData.setVisibility(View.GONE);
+                btnToggleSensorData.setText("▼ 환경 정보 보기");
+            }
+        });
+
+        TextView tvTempHum =
+                dialog.findViewById(R.id.tv_temp_hum);
+
+        TextView tvAirEco2 =
+                dialog.findViewById(R.id.tv_air_eco2);
+
+        TextView tvRssi =
+                dialog.findViewById(R.id.tv_rssi);
 
         SharedPreferences prefs =
                 context.getSharedPreferences("collect_pref", Context.MODE_PRIVATE);
@@ -227,13 +260,7 @@ public class SensorMarkerManager {
 
                 btnCollect.setEnabled(false);
 
-                btnCollect.setText(
-                        String.format(
-                                java.util.Locale.KOREA,
-                                "%.1fm 더 이동",
-                                distance - 10.0
-                        )
-                );
+                btnCollect.setText("센서에 더 접근하세요");
 
                 btnCollect.setBackgroundTintList(
                         ColorStateList.valueOf(Color.GRAY)
@@ -269,6 +296,34 @@ public class SensorMarkerManager {
                             btnCollect.setVisibility(View.VISIBLE);
                             btnCollect.setEnabled(true);
                             btnCollect.setText("수집 완료!");
+                            BleDeviceData data =
+                                    getSensorData(SENSOR_MAC_ADDRESSES[index]);
+
+                            if (data != null) {
+
+                                tvTempHum.setText(
+                                        String.format(
+                                                java.util.Locale.KOREA,
+                                                "온도 : %.1f℃ / 습도 : %.1f%%",
+                                                data.temp,
+                                                data.humidity
+                                        )
+                                );
+
+                                tvAirEco2.setText(
+                                        String.format(
+                                                java.util.Locale.KOREA,
+                                                "공기질 : %d / eCO₂ : %dppm",
+                                                data.aqi,
+                                                data.eco2
+                                        )
+                                );
+                                tvRssi.setText(
+                                        "RSSI : " + data.rssi + " dBm"
+                                );
+
+                                btnToggleSensorData.setVisibility(View.VISIBLE);
+                            }
                             btnCollect.setBackgroundTintList(ColorStateList.valueOf(
                                     Color.parseColor("#4CAF50")));
 
